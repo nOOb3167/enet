@@ -51,15 +51,36 @@ if(HAS_SOCKLEN_T)
 endif()
  
 include_directories(${PROJECT_SOURCE_DIR}/include)
- 
+
+file(GLOB SRC_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/callbacks.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/compress.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/host.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/list.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/packet.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/peer.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/protocol.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/unix.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/win32.c"
+)
+
+file(GLOB HDR_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/callbacks.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/enet.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/list.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/protocol.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/time.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/types.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/unix.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/utility.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/win32.h"
+)
+
 add_library(enet STATIC
-        callbacks.c
-        compress.c
-        host.c
-        list.c
-        packet.c
-        peer.c
-        protocol.c
-        unix.c
-        win32.c
+    ${SRC_ALL}
+    ${HDR_ALL}
     )
+
+# Visual Studio specific
+source_group("Source Files" FILES ${SRC_ALL})
+source_group("Header Files" FILES ${HDR_ALL})
