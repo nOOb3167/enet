@@ -76,11 +76,22 @@ file(GLOB HDR_ALL
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/win32.h"
 )
 
+# Visual Studio specific (Filters / Source Groups)
+source_group("Source Files" FILES ${SRC_ALL})
+source_group("Header Files" FILES ${HDR_ALL})
+
+
 add_library(enet STATIC
     ${SRC_ALL}
     ${HDR_ALL}
     )
 
-# Visual Studio specific
-source_group("Source Files" FILES ${SRC_ALL})
-source_group("Header Files" FILES ${HDR_ALL})
+install(TARGETS enet
+    LIBRARY DESTINATION "lib"
+    ARCHIVE DESTINATION "lib/static"
+    )
+
+install(DIRECTORY "include/"
+    DESTINATION   "include"
+    FILES_MATCHING PATTERN       "include/enet/*.h"
+    )
