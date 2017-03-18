@@ -440,6 +440,10 @@ typedef struct _ENetEvent
    ENetPacket *         packet;    /**< packet associated with the event, if appropriate */
 } ENetEvent;
 
+typedef struct _ENetIntr {
+	void(*cb_last_chance)(void);
+} ENetIntr;
+
 /** @defgroup global ENet global functions
     @{ 
 */
@@ -498,6 +502,7 @@ ENET_API int        enet_socket_connect (ENetSocket, const ENetAddress *);
 ENET_API int        enet_socket_send (ENetSocket, const ENetAddress *, const ENetBuffer *, size_t);
 ENET_API int        enet_socket_receive (ENetSocket, ENetAddress *, ENetBuffer *, size_t);
 ENET_API int        enet_socket_wait (ENetSocket, enet_uint32 *, enet_uint32);
+ENET_API int        enet_socket_wait_interruptible(ENetSocket, enet_uint32 *, enet_uint32, ENetIntr *);
 ENET_API int        enet_socket_set_option (ENetSocket, ENetSocketOption, int);
 ENET_API int        enet_socket_get_option (ENetSocket, ENetSocketOption, int *);
 ENET_API int        enet_socket_shutdown (ENetSocket, ENetSocketShutdown);
@@ -551,6 +556,7 @@ ENET_API void       enet_host_destroy (ENetHost *);
 ENET_API ENetPeer * enet_host_connect (ENetHost *, const ENetAddress *, size_t, enet_uint32);
 ENET_API int        enet_host_check_events (ENetHost *, ENetEvent *);
 ENET_API int        enet_host_service (ENetHost *, ENetEvent *, enet_uint32);
+ENET_API int        enet_host_service_interruptible(ENetHost *, ENetEvent *, enet_uint32, ENetIntr *);
 ENET_API void       enet_host_flush (ENetHost *);
 ENET_API void       enet_host_broadcast (ENetHost *, enet_uint8, ENetPacket *);
 ENET_API void       enet_host_compress (ENetHost *, const ENetCompressor *);

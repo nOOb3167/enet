@@ -4,6 +4,8 @@
 */
 #ifndef _WIN32
 
+#define _GNU_SOURCE  // for ppoll
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -15,6 +17,7 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <signal.h>
 
 #define ENET_BUILDING_LIB 1
 #include "enet/enet.h"
@@ -604,6 +607,82 @@ enet_socket_wait (ENetSocket socket, enet_uint32 * condition, enet_uint32 timeou
 
     return 0;
 #endif
+}
+
+int
+enet_socket_wait_interruptible(ENetSocket socket, enet_uint32 * condition, enet_uint32 timeout, ENetIntr * intr)
+{
+#ifndef HAS_POLL
+#  error no poll - port some time
+#endif /* HAS_POLL */
+
+	struct pollfd pollSocket;
+	int pollCount;
+
+	sigset_t oldSigSet = {};
+	sigset_t newSigSet = {};
+
+	struct timespec timespecTimeout = {};
+	struct timespec * ppollTimespecTimeout = NULL;
+
+	if (((int) timeout) < 0)
+	{
+		ppollTimespecTimeout = NULL;
+	}
+	else
+	{
+		timespecTimeout.tv_sec = timeout / 1000;
+		timespecTimeout.tv_nsec = (timeout % 1000) * 1000000;
+		ppollTimespecTimeout = & timespecTimeout;
+	}
+
+
+	pollSocket.fd = socket;
+	pollSocket.events = 0;
+
+	if (* condition & ENET_SOCKET_WAIT_SEND)
+		pollSocket.events |= POLLOUT;
+
+	if (* condition & ENET_SOCKET_WAIT_RECEIVE)
+		pollSocket.events |= POLLIN;
+
+	if (sigfillset (&newSigSet))
+		return -1;
+
+	if (pthread_sigmask (SIG_SETMASK, & newSigSet, & oldSigSet))
+		return -1;
+
+	intr->cb_last_chance ();
+
+	pollCount = ppoll (& pollSocket, 1, ppollTimespecTimeout, & oldSigSet);
+
+	if (pthread_sigmask (SIG_SETMASK, & oldSigSet, NULL))
+		return -1;
+
+	if (pollCount < 0)
+	{
+		if (errno == EINTR && * condition & ENET_SOCKET_WAIT_INTERRUPT)
+		{
+			* condition = ENET_SOCKET_WAIT_INTERRUPT;
+
+			return 0;
+		}
+
+		return -1;
+	}
+
+	* condition = ENET_SOCKET_WAIT_NONE;
+
+	if (pollCount == 0)
+		return 0;
+
+	if (pollSocket.revents & POLLOUT)
+		* condition |= ENET_SOCKET_WAIT_SEND;
+
+	if (pollSocket.revents & POLLIN)
+		* condition |= ENET_SOCKET_WAIT_RECEIVE;
+
+	return 0;
 }
 
 #endif

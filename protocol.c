@@ -1911,3 +1911,127 @@ enet_host_service (ENetHost * host, ENetEvent * event, enet_uint32 timeout)
     return 0; 
 }
 
+int
+enet_host_service_interruptible(ENetHost * host, ENetEvent * event, enet_uint32 timeout, ENetIntr * intr)
+{
+	enet_uint32 waitCondition;
+
+	if (event != NULL)
+	{
+		event->type = ENET_EVENT_TYPE_NONE;
+		event->peer = NULL;
+		event->packet = NULL;
+
+		switch (enet_protocol_dispatch_incoming_commands(host, event))
+		{
+		case 1:
+			return 1;
+
+		case -1:
+#ifdef ENET_DEBUG
+			perror("Error dispatching incoming packets");
+#endif
+
+			return -1;
+
+		default:
+			break;
+		}
+	}
+
+	host->serviceTime = enet_time_get();
+
+	timeout += host->serviceTime;
+
+	do
+	{
+		if (ENET_TIME_DIFFERENCE(host->serviceTime, host->bandwidthThrottleEpoch) >= ENET_HOST_BANDWIDTH_THROTTLE_INTERVAL)
+			enet_host_bandwidth_throttle(host);
+
+		switch (enet_protocol_send_outgoing_commands(host, event, 1))
+		{
+		case 1:
+			return 1;
+
+		case -1:
+#ifdef ENET_DEBUG
+			perror("Error sending outgoing packets");
+#endif
+
+			return -1;
+
+		default:
+			break;
+		}
+
+		switch (enet_protocol_receive_incoming_commands(host, event))
+		{
+		case 1:
+			return 1;
+
+		case -1:
+#ifdef ENET_DEBUG
+			perror("Error receiving incoming packets");
+#endif
+
+			return -1;
+
+		default:
+			break;
+		}
+
+		switch (enet_protocol_send_outgoing_commands(host, event, 1))
+		{
+		case 1:
+			return 1;
+
+		case -1:
+#ifdef ENET_DEBUG
+			perror("Error sending outgoing packets");
+#endif
+
+			return -1;
+
+		default:
+			break;
+		}
+
+		if (event != NULL)
+		{
+			switch (enet_protocol_dispatch_incoming_commands(host, event))
+			{
+			case 1:
+				return 1;
+
+			case -1:
+#ifdef ENET_DEBUG
+				perror("Error dispatching incoming packets");
+#endif
+
+				return -1;
+
+			default:
+				break;
+			}
+		}
+
+		if (ENET_TIME_GREATER_EQUAL(host->serviceTime, timeout))
+			return 0;
+
+		{
+			host->serviceTime = enet_time_get();
+
+			if (ENET_TIME_GREATER_EQUAL(host->serviceTime, timeout))
+				return 0;
+
+			waitCondition = ENET_SOCKET_WAIT_RECEIVE | ENET_SOCKET_WAIT_INTERRUPT;
+
+			if (enet_socket_wait_interruptible(host->socket, & waitCondition, ENET_TIME_DIFFERENCE(timeout, host->serviceTime), intr) != 0)
+				return -1;
+		}
+
+		host->serviceTime = enet_time_get();
+	} while (waitCondition & ENET_SOCKET_WAIT_RECEIVE);
+
+	return 0;
+}
