@@ -1911,127 +1911,218 @@ enet_host_service (ENetHost * host, ENetEvent * event, enet_uint32 timeout)
     return 0; 
 }
 
-int
-enet_host_service_interruptible(ENetHost * host, ENetEvent * event, enet_uint32 timeout, ENetIntr * intr)
+static int
+enet_host_service_helper_shortcircuit_incoming (ENetHost * host, ENetEvent * event, enet_uint32 timeout)
 {
-	enet_uint32 waitCondition;
+	/* enet_host_service dispatches events one-by-one.
+	*  therefore if several are ready for dispatch,
+	*  we should be able to dispatch before and without
+	*  other intervening processing (ex socket reads and writes). */
 
-	if (event != NULL)
-	{
-		event->type = ENET_EVENT_TYPE_NONE;
-		event->peer = NULL;
-		event->packet = NULL;
+    if (event != NULL)
+    {
+        event -> type = ENET_EVENT_TYPE_NONE;
+        event -> peer = NULL;
+        event -> packet = NULL;
 
-		switch (enet_protocol_dispatch_incoming_commands(host, event))
-		{
-		case 1:
-			return 1;
+        switch (enet_protocol_dispatch_incoming_commands (host, event))
+        {
+        case 1:
+            return 1;
 
-		case -1:
+        case -1:
 #ifdef ENET_DEBUG
-			perror("Error dispatching incoming packets");
+            perror ("Error dispatching incoming packets");
 #endif
 
-			return -1;
+            return -1;
 
-		default:
-			break;
-		}
-	}
+        default:
+            break;
+        }
+    }
 
+	return 0;
+}
+
+static int
+enet_host_service_helper_convert_timeout_to_time_point (ENetHost * host, ENetEvent * event, enet_uint32 * timeout)
+{
+	/* a timeout like in std::this_thread::sleep_for (relative),
+	*  is made alike std::this_thread::sleep_until (absolute).
+	*  example use of the converted timeout: ENET_TIME_GREATER_EQUAL (host -> serviceTime, timeout) */
+
+	* timeout += host->serviceTime;
+
+	return 0;
+}
+
+static int
+enet_host_service_helper_general_work_and_dispatch (ENetHost * host, ENetEvent * event, enet_uint32 timeout)
+{
+	/** send and receive -> extra send -> dispatch.
+	*   - first perform send and receive work (ultimately results in socket operations).
+	*   - this may accumulate commands (ex acknowledgments) which are then serviced
+	*     by performing some more send work.
+	*   - if at least one event is ready, dispatch it. */
+
+    switch (enet_protocol_send_outgoing_commands (host, event, 1))
+    {
+    case 1:
+        return 1;
+
+    case -1:
+#ifdef ENET_DEBUG
+        perror ("Error sending outgoing packets");
+#endif
+
+        return -1;
+
+    default:
+        break;
+    }
+
+    switch (enet_protocol_receive_incoming_commands (host, event))
+    {
+    case 1:
+        return 1;
+
+    case -1:
+#ifdef ENET_DEBUG
+        perror ("Error receiving incoming packets");
+#endif
+
+        return -1;
+
+    default:
+        break;
+    }
+
+    switch (enet_protocol_send_outgoing_commands (host, event, 1))
+    {
+    case 1:
+        return 1;
+
+    case -1:
+#ifdef ENET_DEBUG
+        perror ("Error sending outgoing packets");
+#endif
+
+        return -1;
+
+    default:
+        break;
+    }
+
+    if (event != NULL)
+    {
+        switch (enet_protocol_dispatch_incoming_commands (host, event))
+        {
+        case 1:
+            return 1;
+
+        case -1:
+#ifdef ENET_DEBUG
+            perror ("Error dispatching incoming packets");
+#endif
+
+            return -1;
+
+        default:
+            break;
+        }
+    }
+
+	return 0;
+}
+
+static int
+enet_host_service_helper_service_time_update (ENetHost * host, enet_uint32 timeout)
+{
 	host->serviceTime = enet_time_get();
 
-	timeout += host->serviceTime;
+	return 0;
+}
 
-	do
-	{
-		if (ENET_TIME_DIFFERENCE(host->serviceTime, host->bandwidthThrottleEpoch) >= ENET_HOST_BANDWIDTH_THROTTLE_INTERVAL)
-			enet_host_bandwidth_throttle(host);
+static int
+enet_host_service_helper_service_time_overtime_bail (ENetHost * host, enet_uint32 timeout)
+{
+	if (ENET_TIME_GREATER_EQUAL(host->serviceTime, timeout))
+		return 1;
 
-		switch (enet_protocol_send_outgoing_commands(host, event, 1))
-		{
-		case 1:
-			return 1;
+	return 0;
+}
 
-		case -1:
-#ifdef ENET_DEBUG
-			perror("Error sending outgoing packets");
-#endif
+static int
+enet_host_service_helper_service_time_throttle (ENetHost * host)
+{
+	if (ENET_TIME_DIFFERENCE(host->serviceTime, host->bandwidthThrottleEpoch) >= ENET_HOST_BANDWIDTH_THROTTLE_INTERVAL)
+		enet_host_bandwidth_throttle(host);
 
-			return -1;
+	return 0;
+}
 
-		default:
-			break;
-		}
+static int
+enet_host_service_helper_interruptible_wait (ENetHost * host, enet_uint32 timeout, enet_uint32 * waitCondition, ENetIntr * intr)
+{
+	if (enet_host_service_helper_service_time_update (host, timeout))
+		return -1;
 
-		switch (enet_protocol_receive_incoming_commands(host, event))
-		{
-		case 1:
-			return 1;
+	if (enet_host_service_helper_service_time_overtime_bail (host, timeout))
+		return 0;
 
-		case -1:
-#ifdef ENET_DEBUG
-			perror("Error receiving incoming packets");
-#endif
+	* waitCondition = ENET_SOCKET_WAIT_RECEIVE | ENET_SOCKET_WAIT_INTERRUPT;
 
-			return -1;
+	if (enet_socket_wait_interruptible (host->socket, waitCondition, ENET_TIME_DIFFERENCE(timeout, host->serviceTime), intr) != 0)
+		return -1;
 
-		default:
-			break;
-		}
+	return 0;
+}
 
-		switch (enet_protocol_send_outgoing_commands(host, event, 1))
-		{
-		case 1:
-			return 1;
+static int
+enet_host_service_helper_interruptible (ENetHost * host, ENetEvent * event, enet_uint32 timeout, ENetIntr * intr)
+{
+	int r = 0;
 
-		case -1:
-#ifdef ENET_DEBUG
-			perror("Error sending outgoing packets");
-#endif
+	enet_uint32 waitCondition = ENET_SOCKET_WAIT_NONE;
 
-			return -1;
+	if ((r = enet_host_service_helper_shortcircuit_incoming (host, event, timeout)))
+		return r;
 
-		default:
-			break;
-		}
+	if ((r = enet_host_service_helper_service_time_update (host, timeout)))
+		return r;
 
-		if (event != NULL)
-		{
-			switch (enet_protocol_dispatch_incoming_commands(host, event))
-			{
-			case 1:
-				return 1;
+	if ((r = enet_host_service_helper_convert_timeout_to_time_point (host, event, & timeout)))
+		return r;
 
-			case -1:
-#ifdef ENET_DEBUG
-				perror("Error dispatching incoming packets");
-#endif
+	do {
 
-				return -1;
+		if ((r = enet_host_service_helper_service_time_throttle (host)))
+			return r;
 
-			default:
-				break;
-			}
-		}
+		if ((r = enet_host_service_helper_general_work_and_dispatch (host, event, timeout)))
+			return r;
 
-		if (ENET_TIME_GREATER_EQUAL(host->serviceTime, timeout))
+		/* note: zero */
+		if (enet_host_service_helper_service_time_overtime_bail (host, timeout))
 			return 0;
 
-		{
-			host->serviceTime = enet_time_get();
+		if ((r = enet_host_service_helper_interruptible_wait (host, timeout, & waitCondition, intr)))
+			return r;
 
-			if (ENET_TIME_GREATER_EQUAL(host->serviceTime, timeout))
-				return 0;
+		if (waitCondition & ENET_SOCKET_WAIT_INTERRUPT)
+			return 0;
 
-			waitCondition = ENET_SOCKET_WAIT_RECEIVE | ENET_SOCKET_WAIT_INTERRUPT;
+		if ((r = enet_host_service_helper_service_time_update (host, timeout)))
+			return r;
 
-			if (enet_socket_wait_interruptible(host->socket, & waitCondition, ENET_TIME_DIFFERENCE(timeout, host->serviceTime), intr) != 0)
-				return -1;
-		}
-
-		host->serviceTime = enet_time_get();
 	} while (waitCondition & ENET_SOCKET_WAIT_RECEIVE);
 
 	return 0;
+}
+
+int
+enet_host_service_interruptible (ENetHost * host, ENetEvent * event, enet_uint32 timeout, ENetIntr * intr)
+{
+	return enet_host_service_helper_interruptible (host, event, timeout, intr);
 }
