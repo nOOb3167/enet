@@ -55,7 +55,7 @@ typedef fd_set ENetSocketSet;
 typedef struct _ENetIntrHostDataWin32
 {
 	WSAEVENT EventSocket;
-	WSAEVENT EventInterrupt;
+	HANDLE   hEventInterrupt;
 } ENetIntrHostDataWin32;
 
 #endif /* __ENET_WIN32_H__ */

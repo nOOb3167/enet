@@ -23,6 +23,8 @@ enet_intr_host_data_helper_event_wait(ENetHost * host, enet_uint32 timeoutMsec)
 {
 	ENetIntrHostDataWin32 * data = (ENetIntrHostDataWin32 *) host -> intrHostData.data;
 
+	/* FIXME: can use both WSACreateEvent and CreateEvent events
+	*    in WSAWaitForMultipleEvents but is the type WSAEVENT or HANDLE? */
 	WSAEVENT EventArray[2] = { 0 };
 
 	DWORD ret = 0;
@@ -32,7 +34,7 @@ enet_intr_host_data_helper_event_wait(ENetHost * host, enet_uint32 timeoutMsec)
 	if (host -> intrHostData.type != ENET_INTR_HOST_DATA_TYPE_WIN32)
 		return -1;
 
-	EventArray[0] = data -> EventInterrupt;
+	EventArray[0] = data -> hEventInterrupt;
 	EventArray[1] = data -> EventSocket;
 
 	/* FIXME: timeout handling? special negative timeout value (as poll(2))? set fAlertable for alertable wait? */
@@ -90,14 +92,15 @@ enet_intr_host_data_helper_event_enum(ENetHost * host, enet_uint32 * condition)
 /** Create both events (for Interruption and for Socket activity).
 */
 static int
-enet_intr_host_data_helper_make_event(ENetSocket socket, WSAEVENT * outputWSAEventSocket, WSAEVENT * outputWSAEventInterrupt)
+enet_intr_host_data_helper_make_event(ENetSocket socket, WSAEVENT * outputWSAEventSocket, HANDLE * outputHWSAEventInterrupt)
 {
-	int eventSelectReturn = 0;
-
 	if ((* outputWSAEventSocket = WSACreateEvent ()) == WSA_INVALID_EVENT)
 		return -1;
 
-	if ((* outputWSAEventInterrupt = WSACreateEvent ()) == WSA_INVALID_EVENT)
+	/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms741561(v=vs.85).aspx 
+	*    WSACreateEvent MSDN remarks suggest CreateEvent for creating an auto-reset event. */
+
+	if ((* outputHWSAEventInterrupt = CreateEvent (NULL, FALSE, FALSE, NULL)) == NULL)
 		return -1;
 
 	/* FD_READ alone or also for example FD_WRITE, FD_CLOSE ? */
@@ -128,7 +131,7 @@ enet_intr_host_data_initialize(ENetHost * host)
 	if (!(pData = (ENetIntrHostDataWin32 *) enet_malloc (sizeof (ENetIntrHostDataWin32))))
 		return -1;
 
-	if (enet_intr_host_data_helper_make_event (host -> socket, pData -> EventSocket, pData -> EventInterrupt))
+	if (enet_intr_host_data_helper_make_event (host -> socket, & pData -> EventSocket, & pData -> hEventInterrupt))
 		return -1;
 
 	host -> intrHostData.type = ENET_INTR_HOST_DATA_TYPE_WIN32;
