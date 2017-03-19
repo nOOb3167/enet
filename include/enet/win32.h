@@ -52,6 +52,12 @@ typedef fd_set ENetSocketSet;
 #define ENET_SOCKETSET_REMOVE(sockset, socket) FD_CLR (socket, & (sockset))
 #define ENET_SOCKETSET_CHECK(sockset, socket)  FD_ISSET (socket, & (sockset))
 
+typedef struct _ENetIntrHostDataWin32
+{
+	WSAEVENT EventSocket;
+	WSAEVENT EventInterrupt;
+} ENetIntrHostDataWin32;
+
 #endif /* __ENET_WIN32_H__ */
 
 

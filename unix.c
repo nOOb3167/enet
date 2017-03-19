@@ -67,6 +67,14 @@ typedef int socklen_t;
 
 static enet_uint32 timeBase = 0;
 
+int enet_intr_host_data_initialize (ENetHost * host)
+{
+	host -> intrHostData.type = ENET_INTR_HOST_DATA_TYPE_UNIX;
+	host -> intrHostData.data = NULL;
+
+	return 0;
+}
+
 int
 enet_initialize (void)
 {
@@ -610,7 +618,7 @@ enet_socket_wait (ENetSocket socket, enet_uint32 * condition, enet_uint32 timeou
 }
 
 int
-enet_socket_wait_interruptible(ENetSocket socket, enet_uint32 * condition, enet_uint32 timeout, ENetIntr * intr)
+enet_socket_wait_interruptible(ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, ENetIntr * intr)
 {
 #ifndef HAS_POLL
 #  error no poll - port some time
@@ -637,7 +645,7 @@ enet_socket_wait_interruptible(ENetSocket socket, enet_uint32 * condition, enet_
 	}
 
 
-	pollSocket.fd = socket;
+	pollSocket.fd = host -> socket;
 	pollSocket.events = 0;
 
 	if (* condition & ENET_SOCKET_WAIT_SEND)
@@ -652,7 +660,7 @@ enet_socket_wait_interruptible(ENetSocket socket, enet_uint32 * condition, enet_
 	if (pthread_sigmask (SIG_SETMASK, & newSigSet, & oldSigSet))
 		return -1;
 
-	intr->cb_last_chance ();
+	intr->cb_last_chance (host);
 
 	pollCount = ppoll (& pollSocket, 1, ppollTimespecTimeout, & oldSigSet);
 

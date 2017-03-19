@@ -338,7 +338,20 @@ typedef enet_uint32 (ENET_CALLBACK * ENetChecksumCallback) (const ENetBuffer * b
 
 /** Callback for intercepting received raw UDP packets. Should return 1 to intercept, 0 to ignore, or -1 to propagate an error. */
 typedef int (ENET_CALLBACK * ENetInterceptCallback) (struct _ENetHost * host, struct _ENetEvent * event);
- 
+
+typedef enum _ENetIntrHostDataType
+{
+	ENET_INTR_HOST_DATA_TYPE_NONE = 0xABCDEF12,
+	ENET_INTR_HOST_DATA_TYPE_UNIX = 0xABCDEF34,
+	ENET_INTR_HOST_DATA_TYPE_WIN32 = 0xABCDEF56,
+} NetIntrHostDataType;
+
+typedef struct _ENetIntrHostData
+{
+	enet_uint32 type;
+	void * data;
+} ENetIntrHostData;
+
 /** An ENet host for communicating with peers.
   *
   * No fields should be modified unless otherwise stated.
@@ -393,6 +406,7 @@ typedef struct _ENetHost
    size_t               duplicatePeers;              /**< optional number of allowed peers from duplicate IPs, defaults to ENET_PROTOCOL_MAXIMUM_PEER_ID */
    size_t               maximumPacketSize;           /**< the maximum allowable packet size that may be sent or received on a peer */
    size_t               maximumWaitingData;          /**< the maximum aggregate amount of buffer space a peer may use waiting for packets to be delivered */
+   ENetIntrHostData     intrHostData;
 } ENetHost;
 
 /**
@@ -441,8 +455,10 @@ typedef struct _ENetEvent
 } ENetEvent;
 
 typedef struct _ENetIntr {
-	void(*cb_last_chance)(void);
+	void(*cb_last_chance)(ENetHost * host);
 } ENetIntr;
+
+int enet_intr_host_data_initialize(ENetHost * host);
 
 /** @defgroup global ENet global functions
     @{ 
@@ -502,7 +518,7 @@ ENET_API int        enet_socket_connect (ENetSocket, const ENetAddress *);
 ENET_API int        enet_socket_send (ENetSocket, const ENetAddress *, const ENetBuffer *, size_t);
 ENET_API int        enet_socket_receive (ENetSocket, ENetAddress *, ENetBuffer *, size_t);
 ENET_API int        enet_socket_wait (ENetSocket, enet_uint32 *, enet_uint32);
-ENET_API int        enet_socket_wait_interruptible(ENetSocket, enet_uint32 *, enet_uint32, ENetIntr *);
+ENET_API int        enet_socket_wait_interruptible(ENetHost *, enet_uint32 *, enet_uint32, ENetIntr *);
 ENET_API int        enet_socket_set_option (ENetSocket, ENetSocketOption, int);
 ENET_API int        enet_socket_get_option (ENetSocket, ENetSocketOption, int *);
 ENET_API int        enet_socket_shutdown (ENetSocket, ENetSocketShutdown);

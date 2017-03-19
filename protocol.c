@@ -2073,7 +2073,7 @@ enet_host_service_helper_interruptible_wait (ENetHost * host, enet_uint32 timeou
 
 	* waitCondition = ENET_SOCKET_WAIT_RECEIVE | ENET_SOCKET_WAIT_INTERRUPT;
 
-	if (enet_socket_wait_interruptible (host->socket, waitCondition, ENET_TIME_DIFFERENCE(timeout, host->serviceTime), intr) != 0)
+	if (enet_socket_wait_interruptible (host, waitCondition, ENET_TIME_DIFFERENCE (timeout, host -> serviceTime), intr) != 0)
 		return -1;
 
 	return 0;

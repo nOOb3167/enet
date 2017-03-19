@@ -11,6 +11,132 @@
 
 static enet_uint32 timeBase = 0;
 
+/** Perform similar role as poll(2).
+
+	@retval > 0 if an event occurred within the specified time limit.
+	            specifically: 1 on interrupt and 2 on socket event.
+	@retval 0 if no event occurred
+	@retval < 0 on failure
+*/
+static int
+enet_intr_host_data_helper_event_wait(ENetHost * host, enet_uint32 timeoutMsec)
+{
+	ENetIntrHostDataWin32 * data = (ENetIntrHostDataWin32 *) host -> intrHostData.data;
+
+	WSAEVENT EventArray[2] = { 0 };
+
+	DWORD ret = 0;
+	DWORD indexSignaled = 0;
+
+	/* should not happen */
+	if (host -> intrHostData.type != ENET_INTR_HOST_DATA_TYPE_WIN32)
+		return -1;
+
+	EventArray[0] = data -> EventInterrupt;
+	EventArray[1] = data -> EventSocket;
+
+	/* FIXME: timeout handling? special negative timeout value (as poll(2))? set fAlertable for alertable wait? */
+	ret = WSAWaitForMultipleEvents (2, EventArray, FALSE, timeoutMsec, FALSE);
+
+	if (ret == WSA_WAIT_TIMEOUT)
+		return 0;
+
+	indexSignaled = ret - WSA_WAIT_EVENT_0;
+
+	if (indexSignaled == 0)
+		return 1;
+	else
+		return 2;
+}
+
+static int
+enet_intr_host_data_helper_event_enum(ENetHost * host, enet_uint32 * condition)
+{
+	ENetIntrHostDataWin32 * data = (ENetIntrHostDataWin32 *) host -> intrHostData.data;
+
+	WSAEVENT EventSocket = data -> EventSocket;
+
+	WSANETWORKEVENTS events = { 0 };
+
+	enet_uint32 newCondition = 0;
+
+	/* should not happen */
+	if (host -> intrHostData.type != ENET_INTR_HOST_DATA_TYPE_WIN32)
+		return -1;
+
+	if (WSAEnumNetworkEvents (host -> socket, EventSocket, &events))
+		return -1;
+
+	newCondition = ENET_SOCKET_WAIT_NONE;
+
+	if (* condition & ENET_SOCKET_WAIT_RECEIVE
+		&& events.lNetworkEvents & FD_READ)
+	{
+		newCondition |= ENET_SOCKET_WAIT_RECEIVE;
+	}
+
+	/* only checking for read (FD_READ) - writes are shimmed (always assumed yes) */
+	if (* condition & ENET_SOCKET_WAIT_SEND
+		&& 1 /* dummy */)
+	{
+		newCondition |= ENET_SOCKET_WAIT_SEND;
+	}
+
+	* condition = newCondition;
+
+	return 0;
+}
+
+/** Create both events (for Interruption and for Socket activity).
+*/
+static int
+enet_intr_host_data_helper_make_event(ENetSocket socket, WSAEVENT * outputWSAEventSocket, WSAEVENT * outputWSAEventInterrupt)
+{
+	int eventSelectReturn = 0;
+
+	if ((* outputWSAEventSocket = WSACreateEvent ()) == WSA_INVALID_EVENT)
+		return -1;
+
+	if ((* outputWSAEventInterrupt = WSACreateEvent ()) == WSA_INVALID_EVENT)
+		return -1;
+
+	/* FD_READ alone or also for example FD_WRITE, FD_CLOSE ? */
+	/* note: FD_WRITE is probably a mistake - (almost) always triggered? shimmed instead. */
+	if (WSAEventSelect (socket, * outputWSAEventSocket, FD_READ))
+		return -1;
+
+	return 0;
+}
+
+/** Conditionally initialize intrData (if not initialized yet).
+*/
+static int
+enet_intr_host_data_initialize(ENetHost * host)
+{
+	ENetIntrHostDataWin32 *pData = NULL;
+
+	/* already initialized */
+	if (host -> intrHostData.type == ENET_INTR_HOST_DATA_TYPE_WIN32)
+		return 0;
+
+	/* should not happen */
+	if (host -> intrHostData.type != ENET_INTR_HOST_DATA_TYPE_NONE)
+		return -1;
+
+	/* initialize */
+
+	if (!(pData = (ENetIntrHostDataWin32 *) enet_malloc (sizeof (ENetIntrHostDataWin32))))
+		return -1;
+
+	if (enet_intr_host_data_helper_make_event (host -> socket, pData -> EventSocket, pData -> EventInterrupt))
+		return -1;
+
+	host -> intrHostData.type = ENET_INTR_HOST_DATA_TYPE_WIN32;
+	host -> intrHostData.data = pData;
+
+	return 0;
+}
+
 int
 enet_initialize (void)
 {
@@ -416,7 +542,46 @@ enet_socket_wait (ENetSocket socket, enet_uint32 * condition, enet_uint32 timeou
       * condition |= ENET_SOCKET_WAIT_RECEIVE;
 
     return 0;
-} 
+}
+
+int
+enet_socket_wait_interruptible (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, ENetIntr * intr)
+{
+	int retSocketWait = 0;
+
+	if (enet_intr_host_data_initialize (host))
+		return -1;
+
+	intr->cb_last_chance (host);
+
+	retSocketWait = enet_intr_host_data_helper_event_wait (host, timeout);
+
+	if (retSocketWait < 0)
+		return -1;
+
+	if (retSocketWait == 0)
+	{
+		* condition = ENET_SOCKET_WAIT_NONE;
+
+		return 0;
+	}
+
+	if (retSocketWait == 1)
+	{
+		* condition = ENET_SOCKET_WAIT_INTERRUPT;
+
+		return 0;
+	}
+
+	/* should not happen */
+	if (retSocketWait != 2)
+		return -1;
+
+	if (enet_intr_host_data_helper_event_enum (host, condition))
+		return -1;
+
+	return 0;
+}
 
 #endif
 
