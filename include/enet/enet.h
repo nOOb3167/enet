@@ -339,18 +339,68 @@ typedef enet_uint32 (ENET_CALLBACK * ENetChecksumCallback) (const ENetBuffer * b
 /** Callback for intercepting received raw UDP packets. Should return 1 to intercept, 0 to ignore, or -1 to propagate an error. */
 typedef int (ENET_CALLBACK * ENetInterceptCallback) (struct _ENetHost * host, struct _ENetEvent * event);
 
-typedef enum _ENetIntrHostDataType
+enum ENetIntrDataType
 {
-	ENET_INTR_HOST_DATA_TYPE_NONE = 0xABCDEF12,
-	ENET_INTR_HOST_DATA_TYPE_UNIX = 0xABCDEF34,
-	ENET_INTR_HOST_DATA_TYPE_WIN32 = 0xABCDEF56,
-} NetIntrHostDataType;
+	ENET_INTR_DATA_TYPE_NONE = 0xABCDEF12,
+	ENET_INTR_DATA_TYPE_UNIX = 0xABCDEF34,
+	ENET_INTR_DATA_TYPE_WIN32 = 0xABCDEF56,
+};
 
-typedef struct _ENetIntrHostData
+struct _ENetHost;
+
+struct ENetIntrHostData;
+struct ENetIntrToken;
+struct ENetIntr;
+
+struct ENetIntrHostData
 {
-	enet_uint32 type;
-	void * data;
-} ENetIntrHostData;
+	enum ENetIntrDataType type;
+
+	struct ENetIntrHostData * (*cb_host_create)(void);
+	int(*cb_host_bind)(struct _ENetHost *);
+	int(*cb_host_socket_wait_interruptible)(struct _ENetHost *, enet_uint32 *, enet_uint32, struct ENetIntrHostData *, struct ENetIntrToken *, struct ENetIntr *);
+};
+
+struct ENetIntrToken
+{
+	enum ENetIntrDataType type;
+	// FIXME: this should be a private struct surely
+	struct ENetIntrToken * (*cb_token_create)(void);
+	int(*cb_token_destroy)(struct ENetIntrToken *);
+	int(*cb_token_bind)(struct ENetIntrToken *, struct _ENetHost *);
+	int(*cb_token_unbind)(struct ENetIntrToken *, struct _ENetHost *);
+	int(*cb_token_interrupt)(struct ENetIntrToken *);
+};
+
+struct ENetIntr {
+	void(*cb_last_chance)(struct _ENetHost * host);
+};
+
+// FIXME: sigh but if including win32.h / unix.h from enet.h is wanted this may be best
+#ifdef _WIN32
+
+struct ENetIntrHostDataWin32
+{
+	struct ENetIntrHostData base;
+
+	WSAEVENT EventSocket;      /**< empty value: WSA_INVALID_EVENT */
+	HANDLE   hEventInterrupt;  /**< empty value: NULL */
+};
+
+struct ENetIntrTokenWin32
+{
+	struct ENetIntrToken base;
+
+	struct ENetIntrHostData * intrHostData;
+
+	CRITICAL_SECTION mutexData;
+};
+
+#else
+
+// FIXME: implement
+
+#endif /* _WIN32 */
 
 /** An ENet host for communicating with peers.
   *
@@ -406,7 +456,8 @@ typedef struct _ENetHost
    size_t               duplicatePeers;              /**< optional number of allowed peers from duplicate IPs, defaults to ENET_PROTOCOL_MAXIMUM_PEER_ID */
    size_t               maximumPacketSize;           /**< the maximum allowable packet size that may be sent or received on a peer */
    size_t               maximumWaitingData;          /**< the maximum aggregate amount of buffer space a peer may use waiting for packets to be delivered */
-   ENetIntrHostData     intrHostData;
+   struct ENetIntrHostData intrHostData;             /**< interruption support - data ownership exclusive to host */
+   struct ENetIntrToken *  intrToken;                /**< interruption support - data ownership shared */
 } ENetHost;
 
 /**
@@ -453,12 +504,6 @@ typedef struct _ENetEvent
    enet_uint32          data;      /**< data associated with the event, if appropriate */
    ENetPacket *         packet;    /**< packet associated with the event, if appropriate */
 } ENetEvent;
-
-typedef struct _ENetIntr {
-	void(*cb_last_chance)(ENetHost * host);
-} ENetIntr;
-
-int enet_intr_host_data_initialize(ENetHost * host);
 
 /** @defgroup global ENet global functions
     @{ 
@@ -518,7 +563,6 @@ ENET_API int        enet_socket_connect (ENetSocket, const ENetAddress *);
 ENET_API int        enet_socket_send (ENetSocket, const ENetAddress *, const ENetBuffer *, size_t);
 ENET_API int        enet_socket_receive (ENetSocket, ENetAddress *, ENetBuffer *, size_t);
 ENET_API int        enet_socket_wait (ENetSocket, enet_uint32 *, enet_uint32);
-ENET_API int        enet_socket_wait_interruptible(ENetHost *, enet_uint32 *, enet_uint32, ENetIntr *);
 ENET_API int        enet_socket_set_option (ENetSocket, ENetSocketOption, int);
 ENET_API int        enet_socket_get_option (ENetSocket, ENetSocketOption, int *);
 ENET_API int        enet_socket_shutdown (ENetSocket, ENetSocketShutdown);
@@ -572,7 +616,7 @@ ENET_API void       enet_host_destroy (ENetHost *);
 ENET_API ENetPeer * enet_host_connect (ENetHost *, const ENetAddress *, size_t, enet_uint32);
 ENET_API int        enet_host_check_events (ENetHost *, ENetEvent *);
 ENET_API int        enet_host_service (ENetHost *, ENetEvent *, enet_uint32);
-ENET_API int        enet_host_service_interruptible(ENetHost *, ENetEvent *, enet_uint32, ENetIntr *);
+ENET_API int        enet_host_service_interruptible (ENetHost *, ENetEvent *, enet_uint32, struct ENetIntrHostData *, struct ENetIntrToken *, struct ENetIntr *);
 ENET_API void       enet_host_flush (ENetHost *);
 ENET_API void       enet_host_broadcast (ENetHost *, enet_uint8, ENetPacket *);
 ENET_API void       enet_host_compress (ENetHost *, const ENetCompressor *);

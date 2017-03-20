@@ -6,6 +6,19 @@
 #include <string.h>
 #include "enet/enet.h"
 
+static int
+enet_host_intr_reset(ENetHost * host)
+{
+	host -> intrHostData.type = ENET_INTR_DATA_TYPE_NONE;
+	host -> intrHostData.cb_host_create = NULL;
+	host -> intrHostData.cb_host_bind = NULL;
+	host -> intrHostData.cb_host_socket_wait_interruptible = NULL;
+
+	host -> intrToken = NULL;
+	
+	return 0;
+}
+
 /** @defgroup host ENet host functions
     @{
 */
@@ -103,8 +116,9 @@ enet_host_create (const ENetAddress * address, size_t peerCount, size_t channelL
     host -> maximumPacketSize = ENET_HOST_DEFAULT_MAXIMUM_PACKET_SIZE;
     host -> maximumWaitingData = ENET_HOST_DEFAULT_MAXIMUM_WAITING_DATA;
 
-	host -> intrHostData.type = ENET_INTR_HOST_DATA_TYPE_NONE;
-	host -> intrHostData.data = NULL;
+	/* FIXME: proper cleanup (socket, peers, and host afaik) */
+	if (enet_host_intr_reset (host))
+		return NULL;
 
     host -> compressor.context = NULL;
     host -> compressor.compress = NULL;

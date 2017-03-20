@@ -2063,7 +2063,7 @@ enet_host_service_helper_service_time_throttle (ENetHost * host)
 }
 
 static int
-enet_host_service_helper_interruptible_wait (ENetHost * host, enet_uint32 timeout, enet_uint32 * waitCondition, ENetIntr * intr)
+enet_host_service_helper_interruptible_wait (ENetHost * host, enet_uint32 timeout, enet_uint32 * waitCondition, struct ENetIntrHostData * intrHostData, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
 	if (enet_host_service_helper_service_time_update (host, timeout))
 		return -1;
@@ -2073,14 +2073,14 @@ enet_host_service_helper_interruptible_wait (ENetHost * host, enet_uint32 timeou
 
 	* waitCondition = ENET_SOCKET_WAIT_RECEIVE | ENET_SOCKET_WAIT_INTERRUPT;
 
-	if (enet_socket_wait_interruptible (host, waitCondition, ENET_TIME_DIFFERENCE (timeout, host -> serviceTime), intr) != 0)
+	if (intrHostData -> cb_host_socket_wait_interruptible (host, waitCondition, ENET_TIME_DIFFERENCE (timeout, host -> serviceTime), intrHostData, intrToken, intr))
 		return -1;
 
 	return 0;
 }
 
 static int
-enet_host_service_helper_interruptible (ENetHost * host, ENetEvent * event, enet_uint32 timeout, ENetIntr * intr)
+enet_host_service_helper_interruptible (ENetHost * host, ENetEvent * event, enet_uint32 timeout, struct ENetIntrHostData * intrHostData, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
 	int r = 0;
 
@@ -2107,7 +2107,7 @@ enet_host_service_helper_interruptible (ENetHost * host, ENetEvent * event, enet
 		if (enet_host_service_helper_service_time_overtime_bail (host, timeout))
 			return 0;
 
-		if ((r = enet_host_service_helper_interruptible_wait (host, timeout, & waitCondition, intr)))
+		if ((r = enet_host_service_helper_interruptible_wait (host, timeout, & waitCondition, intrHostData, intrToken, intr)))
 			return r;
 
 		if (waitCondition & ENET_SOCKET_WAIT_INTERRUPT)
@@ -2122,7 +2122,7 @@ enet_host_service_helper_interruptible (ENetHost * host, ENetEvent * event, enet
 }
 
 int
-enet_host_service_interruptible (ENetHost * host, ENetEvent * event, enet_uint32 timeout, ENetIntr * intr)
+enet_host_service_interruptible (ENetHost * host, ENetEvent * event, enet_uint32 timeout, struct ENetIntrHostData * intrHostData, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
-	return enet_host_service_helper_interruptible (host, event, timeout, intr);
+	return enet_host_service_helper_interruptible (host, event, timeout, intrHostData, intrToken, intr);
 }

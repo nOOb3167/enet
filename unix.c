@@ -67,9 +67,10 @@ typedef int socklen_t;
 
 static enet_uint32 timeBase = 0;
 
-int enet_intr_host_data_initialize (ENetHost * host)
+static int
+enet_intr_host_data_initialize (ENetHost * host)
 {
-	host -> intrHostData.type = ENET_INTR_HOST_DATA_TYPE_UNIX;
+	host -> intrHostData.type = ENET_INTR_DATA_TYPE_UNIX;
 	host -> intrHostData.data = NULL;
 
 	return 0;
