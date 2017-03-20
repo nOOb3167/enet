@@ -9,10 +9,19 @@
 static int
 enet_host_intr_reset(ENetHost * host)
 {
-	host -> intrHostData.type = ENET_INTR_DATA_TYPE_NONE;
-	host -> intrHostData.cb_host_create = NULL;
-	host -> intrHostData.cb_host_bind = NULL;
-	host -> intrHostData.cb_host_socket_wait_interruptible = NULL;
+	/* FIXME: should release old if any - beware of releasing uninitialized though */
+
+	struct ENetIntrHostData * intrHostData = (struct ENetIntrHostData *) enet_malloc (sizeof (struct ENetIntrHostData));
+
+	if (!intrHostData)
+		return -1;
+
+	host -> intrHostData = intrHostData;
+
+	host -> intrHostData -> type = ENET_INTR_DATA_TYPE_NONE;
+	host -> intrHostData -> cb_host_create = NULL;
+	host -> intrHostData -> cb_host_bind = NULL;
+	host -> intrHostData -> cb_host_socket_wait_interruptible = NULL;
 
 	host -> intrToken = NULL;
 	

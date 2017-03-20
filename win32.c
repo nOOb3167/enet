@@ -21,7 +21,7 @@ static enet_uint32 timeBase = 0;
 static int
 enet_intr_host_data_helper_event_wait (ENetHost * host, enet_uint32 timeoutMsec)
 {
-	struct ENetIntrHostDataWin32 * data = (struct ENetIntrHostDataWin32 *) & host -> intrHostData;
+	struct ENetIntrHostDataWin32 * data = (struct ENetIntrHostDataWin32 *) host -> intrHostData;
 
 	/* FIXME: can use both WSACreateEvent and CreateEvent events
 	*    in WSAWaitForMultipleEvents but is the type WSAEVENT or HANDLE? */
@@ -31,7 +31,7 @@ enet_intr_host_data_helper_event_wait (ENetHost * host, enet_uint32 timeoutMsec)
 	DWORD indexSignaled = 0;
 
 	/* should not happen */
-	if (host -> intrHostData.type != ENET_INTR_DATA_TYPE_WIN32)
+	if (host -> intrHostData -> type != ENET_INTR_DATA_TYPE_WIN32)
 		return -1;
 
 	EventArray[0] = data -> hEventInterrupt;
@@ -54,7 +54,7 @@ enet_intr_host_data_helper_event_wait (ENetHost * host, enet_uint32 timeoutMsec)
 static int
 enet_intr_host_data_helper_event_enum (ENetHost * host, enet_uint32 * condition)
 {
-	struct ENetIntrHostDataWin32 * data = (struct ENetIntrHostDataWin32 *) & host -> intrHostData;
+	struct ENetIntrHostDataWin32 * data = (struct ENetIntrHostDataWin32 *) host -> intrHostData;
 
 	WSAEVENT EventSocket = data -> EventSocket;
 
@@ -63,7 +63,7 @@ enet_intr_host_data_helper_event_enum (ENetHost * host, enet_uint32 * condition)
 	enet_uint32 newCondition = 0;
 
 	/* should not happen */
-	if (host -> intrHostData.type != ENET_INTR_DATA_TYPE_WIN32)
+	if (host -> intrHostData -> type != ENET_INTR_DATA_TYPE_WIN32)
 		return -1;
 
 	if (WSAEnumNetworkEvents (host -> socket, EventSocket, &events))
@@ -116,14 +116,14 @@ enet_intr_host_helper_make_event (ENetSocket socket, WSAEVENT * outputWSAEventSo
 static int
 enet_intr_host_bind_win32 (ENetHost * host)
 {
-	struct ENetIntrHostDataWin32 * pData = (struct ENetIntrHostDataWin32 *) & host -> intrHostData;
+	struct ENetIntrHostDataWin32 * pData = (struct ENetIntrHostDataWin32 *) host -> intrHostData;
 
 	/* already initialized */
-	if (host -> intrHostData.type == ENET_INTR_DATA_TYPE_WIN32)
+	if (host -> intrHostData -> type == ENET_INTR_DATA_TYPE_WIN32)
 		return 0;
 
 	/* should not happen */
-	if (host -> intrHostData.type != ENET_INTR_DATA_TYPE_NONE)
+	if (host -> intrHostData -> type != ENET_INTR_DATA_TYPE_NONE)
 		return -1;
 
 	/* initialize */
@@ -228,7 +228,7 @@ enet_intr_token_bind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
 	/* take unlock responsibility */
 	pMutexData = & pToken -> mutexData;
 
-	pToken -> intrHostData = & host -> intrHostData;
+	pToken -> intrHostData = host -> intrHostData;
 
 	/* also connect the other way (host -> token) */
 	host -> intrToken = (struct ENetIntrToken *) pToken;
@@ -258,7 +258,7 @@ enet_intr_token_unbind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
 	pMutexData = & pToken -> mutexData;
 
 	/* not bound to passed host? */
-	if (pToken -> intrHostData != & host -> intrHostData)
+	if (pToken -> intrHostData != host -> intrHostData)
 		{ ret = -1; goto clean; };
 
 	pToken -> intrHostData = NULL;
