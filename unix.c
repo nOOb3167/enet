@@ -661,7 +661,7 @@ enet_socket_wait_interruptible(ENetHost * host, enet_uint32 * condition, enet_ui
 	if (pthread_sigmask (SIG_SETMASK, & newSigSet, & oldSigSet))
 		return -1;
 
-	intr->cb_last_chance (host);
+	intr->cb_last_chance (intrToken);
 
 	pollCount = ppoll (& pollSocket, 1, ppollTimespecTimeout, & oldSigSet);
 

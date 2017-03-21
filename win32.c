@@ -156,7 +156,7 @@ enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * c
 	if (intrToken -> cb_token_bind (intrToken, host))
 		return -1;
 
-	intr -> cb_last_chance (host);
+	intr -> cb_last_chance (intrToken);
 
 	retSocketWait = enet_intr_host_data_helper_event_wait (host, timeout);
 

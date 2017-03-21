@@ -374,7 +374,7 @@ struct ENetIntrToken
 };
 
 struct ENetIntr {
-	void(*cb_last_chance)(struct _ENetHost * host);
+	void(*cb_last_chance)(struct ENetIntrToken *);
 };
 
 // FIXME: sigh but if including win32.h / unix.h from enet.h is wanted this may be best
