@@ -52,7 +52,7 @@ typedef fd_set ENetSocketSet;
 #define ENET_SOCKETSET_REMOVE(sockset, socket) FD_CLR (socket, & (sockset))
 #define ENET_SOCKETSET_CHECK(sockset, socket)  FD_ISSET (socket, & (sockset))
 
-ENET_API struct ENetIntrHostData * enet_intr_host_create_win32(void);
+ENET_API struct ENetIntrHostData * enet_intr_host_create_and_bind_win32(struct _ENetHost *);
 ENET_API struct ENetIntrToken *    enet_intr_token_create_win32(void);
 
 #endif /* __ENET_WIN32_H__ */

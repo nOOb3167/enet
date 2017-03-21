@@ -356,8 +356,9 @@ struct ENetIntrHostData
 {
 	enum ENetIntrDataType type;
 
-	struct ENetIntrHostData * (*cb_host_create)(void);
-	int(*cb_host_bind)(struct _ENetHost *);
+	struct ENetIntrHostData * (*cb_host_create)(struct _ENetHost *);
+	int(*cb_host_destroy)(struct _ENetHost * host);
+	int(*cb_host_bind)(struct _ENetHost *, struct ENetIntrHostData *);
 	int(*cb_host_socket_wait_interruptible)(struct _ENetHost *, enet_uint32 *, enet_uint32, struct ENetIntrHostData *, struct ENetIntrToken *, struct ENetIntr *);
 };
 
@@ -456,7 +457,7 @@ typedef struct _ENetHost
    size_t               duplicatePeers;              /**< optional number of allowed peers from duplicate IPs, defaults to ENET_PROTOCOL_MAXIMUM_PEER_ID */
    size_t               maximumPacketSize;           /**< the maximum allowable packet size that may be sent or received on a peer */
    size_t               maximumWaitingData;          /**< the maximum aggregate amount of buffer space a peer may use waiting for packets to be delivered */
-   struct ENetIntrHostData * intrHostData;           /**< interruption support - data ownership exclusive to host */
+   struct ENetIntrHostData * intrHostData;           /**< interruption support - data ownership exclusive to host - FIXME: design, but is it still accurate? */
    struct ENetIntrToken *    intrToken;              /**< interruption support - data ownership shared */
 } ENetHost;
 

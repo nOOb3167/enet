@@ -11,6 +11,28 @@
 
 static enet_uint32 timeBase = 0;
 
+/**
+    @retval > 0 if host already bound to (the same) intrHostData
+	@retval 0 otherwise
+*/
+static int
+enet_intr_host_data_already_bound (ENetHost * host, struct ENetIntrHostData * intrHostData)
+{
+	if (host -> intrHostData == intrHostData)
+		return 1;
+
+	return 0;
+}
+
+static int
+enet_intr_token_already_bound (ENetHost * host, struct ENetIntrToken * intrToken)
+{
+	if (host -> intrToken == intrToken)
+		return 1;
+
+	return 0;
+}
+
 /** Perform similar role as poll(2).
 
 	@retval > 0 if an event occurred within the specified time limit.
@@ -92,7 +114,7 @@ enet_intr_host_data_helper_event_enum (ENetHost * host, enet_uint32 * condition)
 /** Create both events (for Interruption and for Socket activity).
 */
 static int
-enet_intr_host_helper_make_event (ENetSocket socket, WSAEVENT * outputWSAEventSocket, HANDLE * outputHWSAEventInterrupt)
+enet_intr_host_data_helper_make_event (ENetSocket socket, WSAEVENT * outputWSAEventSocket, HANDLE * outputHWSAEventInterrupt)
 {
 	if ((* outputWSAEventSocket = WSACreateEvent ()) == WSA_INVALID_EVENT)
 		return -1;
@@ -111,24 +133,13 @@ enet_intr_host_helper_make_event (ENetSocket socket, WSAEVENT * outputWSAEventSo
 	return 0;
 }
 
-/** Conditionally initialize intrData (if not initialized yet).
-*/
-static int
-enet_intr_host_bind_win32 (ENetHost * host)
+static
+enet_intr_host_data_helper_free_event (WSAEVENT * outputWSAEventSocket, HANDLE * outputHWSAEventInterrupt)
 {
-	struct ENetIntrHostDataWin32 * pData = (struct ENetIntrHostDataWin32 *) host -> intrHostData;
-
-	/* already initialized */
-	if (host -> intrHostData -> type == ENET_INTR_DATA_TYPE_WIN32)
-		return 0;
-
-	/* should not happen */
-	if (host -> intrHostData -> type != ENET_INTR_DATA_TYPE_NONE)
+	if (! WSACloseEvent (outputWSAEventSocket))
 		return -1;
 
-	/* initialize */
-
-	if (enet_intr_host_helper_make_event (host -> socket, & pData -> EventSocket, & pData -> hEventInterrupt))
+	if (! CloseHandle (outputHWSAEventInterrupt))
 		return -1;
 
 	return 0;
@@ -139,13 +150,13 @@ enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * c
 {
 	int retSocketWait = 0;
 
-	if (intrHostData -> cb_host_bind (host))
+	if (! enet_intr_host_data_already_bound (host, intrHostData))
 		return -1;
 
 	if (intrToken -> cb_token_bind (intrToken, host))
 		return -1;
 
-	intr->cb_last_chance (host);
+	intr -> cb_last_chance (host);
 
 	retSocketWait = enet_intr_host_data_helper_event_wait (host, timeout);
 
@@ -176,8 +187,45 @@ enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * c
 	return 0;
 }
 
+static int
+enet_intr_host_bind_win32 (ENetHost * host, struct ENetIntrHostData * intrHostData)
+{
+	if (enet_intr_host_data_already_bound (host, intrHostData))
+		return 0;
+
+	if (intrHostData -> type != ENET_INTR_DATA_TYPE_WIN32)
+		return -1;
+
+	/* would overwrite existing */
+	if (host -> intrHostData)
+		return -1;
+
+	host -> intrHostData = intrHostData;
+
+	return 0;
+}
+
+static int
+enet_intr_host_destroy_win32 (struct _ENetHost * host)
+{
+	struct ENetIntrHostDataWin32 * pData = (struct ENetIntrHostDataWin32 *) host -> intrHostData;
+
+	if (! pData)
+		return 0;
+
+	if (pData -> base.type != ENET_INTR_DATA_TYPE_WIN32)
+		return -1;
+
+	if (enet_intr_host_data_helper_free_event (& pData -> EventSocket, & pData -> hEventInterrupt))
+		return -1;
+
+	enet_free (pData);
+
+	return 0;
+}
+
 struct ENetIntrHostData *
-enet_intr_host_create_win32 (void)
+enet_intr_host_create_and_bind_win32 (struct _ENetHost * host)
 {
 	struct ENetIntrHostDataWin32 *pData = (struct ENetIntrHostDataWin32 *) enet_malloc (sizeof(struct ENetIntrHostDataWin32));
 
@@ -186,12 +234,23 @@ enet_intr_host_create_win32 (void)
 
 	pData -> base.type = ENET_INTR_DATA_TYPE_WIN32;
 
-	pData -> base.cb_host_create = enet_intr_host_create_win32;
+	pData -> base.cb_host_create = enet_intr_host_create_and_bind_win32;
+	pData -> base.cb_host_destroy = enet_intr_host_destroy_win32;
 	pData -> base.cb_host_bind = enet_intr_host_bind_win32;
 	pData -> base.cb_host_socket_wait_interruptible = enet_intr_host_socket_wait_interruptible_win32;
 
+	/* initialize events */
+
 	pData -> EventSocket = WSA_INVALID_EVENT;
 	pData -> hEventInterrupt = NULL;
+
+	if (enet_intr_host_data_helper_make_event (host -> socket, & pData -> EventSocket, & pData -> hEventInterrupt))
+		return NULL;
+
+	/* bind to host */
+
+	if (pData -> base.cb_host_bind (host, (struct ENetIntrHostData *) pData))
+		return NULL;
 
 	return & pData -> base;
 }
@@ -212,25 +271,32 @@ enet_intr_token_destroy_win32 (struct ENetIntrToken * gentoken)
 }
 
 static int
-enet_intr_token_bind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
+enet_intr_token_bind_win32 (struct ENetIntrToken * intrToken, ENetHost * host)
 {
 	int ret = 0;
 
 	LPCRITICAL_SECTION pMutexData = NULL;
 
-	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) gentoken;
+	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) intrToken;
 
-	/* paranoia */
-	if (gentoken -> type != ENET_INTR_DATA_TYPE_WIN32)
+	if (enet_intr_token_already_bound (host, intrToken))
+		return 0;
+
+	if (intrToken -> type != ENET_INTR_DATA_TYPE_WIN32)
 		{ ret = -1; goto clean; }
 
 	EnterCriticalSection (& pToken -> mutexData);
 	/* take unlock responsibility */
 	pMutexData = & pToken -> mutexData;
 
+	/* bind on token side */
 	pToken -> intrHostData = host -> intrHostData;
 
-	/* also connect the other way (host -> token) */
+	/* would overwrite existing */
+	if (host -> intrToken)
+		return -1;
+
+	/* bind on host side */
 	host -> intrToken = (struct ENetIntrToken *) pToken;
 
 clean:

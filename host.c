@@ -6,28 +6,6 @@
 #include <string.h>
 #include "enet/enet.h"
 
-static int
-enet_host_intr_reset(ENetHost * host)
-{
-	/* FIXME: should release old if any - beware of releasing uninitialized though */
-
-	struct ENetIntrHostData * intrHostData = (struct ENetIntrHostData *) enet_malloc (sizeof (struct ENetIntrHostData));
-
-	if (!intrHostData)
-		return -1;
-
-	host -> intrHostData = intrHostData;
-
-	host -> intrHostData -> type = ENET_INTR_DATA_TYPE_NONE;
-	host -> intrHostData -> cb_host_create = NULL;
-	host -> intrHostData -> cb_host_bind = NULL;
-	host -> intrHostData -> cb_host_socket_wait_interruptible = NULL;
-
-	host -> intrToken = NULL;
-	
-	return 0;
-}
-
 /** @defgroup host ENet host functions
     @{
 */
@@ -125,9 +103,8 @@ enet_host_create (const ENetAddress * address, size_t peerCount, size_t channelL
     host -> maximumPacketSize = ENET_HOST_DEFAULT_MAXIMUM_PACKET_SIZE;
     host -> maximumWaitingData = ENET_HOST_DEFAULT_MAXIMUM_WAITING_DATA;
 
-	/* FIXME: proper cleanup (socket, peers, and host afaik) */
-	if (enet_host_intr_reset (host))
-		return NULL;
+	host->intrHostData = NULL;
+	host->intrToken = NULL;
 
     host -> compressor.context = NULL;
     host -> compressor.compress = NULL;
