@@ -2062,9 +2062,20 @@ enet_host_service_helper_service_time_throttle (ENetHost * host)
 	return 0;
 }
 
+/** Interruptible wait with legacy waitCondition semantics (see parameter description).
+    @param[out] waitCondition an ENetSocketWaitCondition flag MASK _or_ the VALUE ENET_SOCKET_WAIT_NONE.
+							  note VALUE: especially if zero, MUST be tested for as
+							  (variable == VALUE) and not (variable & VALUE) like a flag mask.
+							  ENET_SOCKET_WAIT_NONE is the returned waitCondition if timed out.
+    @retval 0 if either: - timed out via enet 'manual' service_time timeout tracking.
+	                     - timed out having actually called for a wait on the socket.
+    @retval < 0 on failure
+*/
 static int
 enet_host_service_helper_interruptible_wait (ENetHost * host, enet_uint32 timeout, enet_uint32 * waitCondition, struct ENetIntrHostData * intrHostData, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
+	* waitCondition = ENET_SOCKET_WAIT_NONE;
+
 	if (enet_host_service_helper_service_time_update (host, timeout))
 		return -1;
 
@@ -2109,6 +2120,9 @@ enet_host_service_helper_interruptible (ENetHost * host, ENetEvent * event, enet
 
 		if ((r = enet_host_service_helper_interruptible_wait (host, timeout, & waitCondition, intrHostData, intrToken, intr)))
 			return r;
+
+		if (waitCondition == ENET_SOCKET_WAIT_NONE)
+			return 0;
 
 		if (waitCondition & ENET_SOCKET_WAIT_INTERRUPT)
 			return 0;
