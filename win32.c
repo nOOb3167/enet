@@ -152,6 +152,24 @@ enet_intr_host_data_helper_free_event (WSAEVENT * outputWSAEventSocket, HANDLE *
 }
 
 static int
+enet_intr_host_token_bind(ENetHost * host, struct ENetIntrToken * intrToken)
+{
+	/* early exit */
+	if (enet_intr_token_already_bound (host, intrToken))
+		return 0;
+
+	if (intrToken -> type != ENET_INTR_DATA_TYPE_WIN32)
+		return -1;
+
+	if (intrToken -> cb_token_bind (intrToken, host))
+		return -1;
+
+	host -> intrToken = intrToken;
+
+	return 0;
+}
+
+static int
 enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrHostData * intrHostData, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
 	int retSocketWait = 0;
@@ -159,7 +177,7 @@ enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * c
 	if (! enet_intr_host_data_already_bound (host, intrHostData))
 		return -1;
 
-	if (intrToken -> cb_token_bind (intrToken, host))
+	if (enet_intr_host_token_bind (host, intrToken))
 		return -1;
 
 	intr -> cb_last_chance (intrToken);
@@ -283,49 +301,25 @@ enet_intr_token_destroy_win32 (struct ENetIntrToken * gentoken)
 	Calls to this function are designed to be triggered from the ENetHost host.
     - Host has to ensure read access to intrHostData field is safe
 	(sequencing, no conflicting writes, field not yet destroyed, etc).
-	- Host has to ensure write access to intrToken field is safe.
-	By field it is meant the pointer only (not accesses within the pointed-to struct).
-	Ensuring both seemingly should not require locking at the host side.
-	(ex since calls are only triggered from the host.
+	Ensuring this seemingly should not require locking at the host side.
+	(ex since calls are only triggered from the host)
 */
 static int
 enet_intr_token_bind_win32 (struct ENetIntrToken * intrToken, ENetHost * host)
 {
-	int ret = 0;
-
-	LPCRITICAL_SECTION pMutexData = NULL;
-
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) intrToken;
 
 	if (intrToken -> type != ENET_INTR_DATA_TYPE_WIN32)
-		{ ret = -1; goto clean; }
-
-	/* FIXME: can this check actually be performed outside the mutex lock ?
-	*    probably not: host 'notifies' token of host destruction by disabling the token.
-	*                  need to check for disabled state (which must be inside mutex lock) before this check.
-	*                  releasing the mutex lock after disabled state check will race against host destruction. */
-	if (enet_intr_token_already_bound (host, intrToken))
-		{ ret = 0; goto clean; };
+		return -1;
 
 	EnterCriticalSection (& pToken -> mutexData);
-	/* take unlock responsibility */
-	pMutexData = & pToken -> mutexData;
 
 	/* bind on token side */
 	pToken -> base.intrHostData = host -> intrHostData;
 
-	/* would overwrite existing */
-	if (host -> intrToken)
-		{ ret = -1; goto clean; };
+	LeaveCriticalSection (& pToken -> mutexData);
 
-	/* bind on host side */
-	host -> intrToken = (struct ENetIntrToken *) pToken;
-
-clean:
-	if (pMutexData)
-		LeaveCriticalSection (pMutexData);
-
-	return ret;
+	return 0;
 }
 
 static int
