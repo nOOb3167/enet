@@ -139,7 +139,7 @@ enet_intr_host_data_helper_make_event (ENetSocket socket, WSAEVENT * outputWSAEv
 	return 0;
 }
 
-static
+static int
 enet_intr_host_data_helper_free_event (WSAEVENT * outputWSAEventSocket, HANDLE * outputHWSAEventInterrupt)
 {
 	if (! WSACloseEvent (outputWSAEventSocket))
