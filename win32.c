@@ -33,6 +33,12 @@ enet_intr_token_already_bound (ENetHost * host, struct ENetIntrToken * intrToken
 	return 0;
 }
 
+static int
+enet_intr_token_disabled (struct ENetIntrToken * intrToken)
+{
+	return ! intrToken -> intrHostData;
+}
+
 /** Perform similar role as poll(2).
 
 	@retval > 0 if an event occurred within the specified time limit.
@@ -270,6 +276,18 @@ enet_intr_token_destroy_win32 (struct ENetIntrToken * gentoken)
 	return 0;
 }
 
+/** Blindly overwrite token with new host (unless already bound to it).
+    If token is already bound to a host it will not be unbound
+	from the old host or anything.
+    
+	Calls to this function are designed to be triggered from the ENetHost host.
+    - Host has to ensure read access to intrHostData field is safe
+	(sequencing, no conflicting writes, field not yet destroyed, etc).
+	- Host has to ensure write access to intrToken field is safe.
+	By field it is meant the pointer only (not accesses within the pointed-to struct).
+	Ensuring both seemingly should not require locking at the host side.
+	(ex since calls are only triggered from the host.
+*/
 static int
 enet_intr_token_bind_win32 (struct ENetIntrToken * intrToken, ENetHost * host)
 {
@@ -279,29 +297,33 @@ enet_intr_token_bind_win32 (struct ENetIntrToken * intrToken, ENetHost * host)
 
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) intrToken;
 
-	if (enet_intr_token_already_bound (host, intrToken))
-		return 0;
-
 	if (intrToken -> type != ENET_INTR_DATA_TYPE_WIN32)
 		{ ret = -1; goto clean; }
+
+	/* FIXME: can this check actually be performed outside the mutex lock ?
+	*    probably not: host 'notifies' token of host destruction by disabling the token.
+	*                  need to check for disabled state (which must be inside mutex lock) before this check.
+	*                  releasing the mutex lock after disabled state check will race against host destruction. */
+	if (enet_intr_token_already_bound (host, intrToken))
+		{ ret = 0; goto clean; };
 
 	EnterCriticalSection (& pToken -> mutexData);
 	/* take unlock responsibility */
 	pMutexData = & pToken -> mutexData;
 
 	/* bind on token side */
-	pToken -> intrHostData = host -> intrHostData;
+	pToken -> base.intrHostData = host -> intrHostData;
 
 	/* would overwrite existing */
 	if (host -> intrToken)
-		return -1;
+		{ ret = -1; goto clean; };
 
 	/* bind on host side */
 	host -> intrToken = (struct ENetIntrToken *) pToken;
 
 clean:
 	if (pMutexData)
-		LeaveCriticalSection (& pToken -> mutexData);
+		LeaveCriticalSection (pMutexData);
 
 	return ret;
 }
@@ -323,15 +345,18 @@ enet_intr_token_unbind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
 	/* take unlock responsibility */
 	pMutexData = & pToken -> mutexData;
 
+	if (enet_intr_token_disabled (& pToken -> base))
+		{ ret = 0; goto clean; };
+
 	/* not bound to passed host? */
-	if (pToken -> intrHostData != host -> intrHostData)
+	if (pToken -> base.intrHostData != host -> intrHostData)
 		{ ret = -1; goto clean; };
 
-	pToken -> intrHostData = NULL;
+	pToken -> base.intrHostData = NULL;
 
 clean:
 	if (pMutexData)
-		LeaveCriticalSection(& pToken->mutexData);
+		LeaveCriticalSection (pMutexData);
 
 	return ret;
 }
@@ -339,21 +364,35 @@ clean:
 static int
 enet_intr_token_interrupt_win32 (struct ENetIntrToken * gentoken)
 {
+	int ret = 0;
+
+	LPCRITICAL_SECTION pMutexData = NULL;
+
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) gentoken;
-	struct ENetIntrHostDataWin32 * pData = (struct ENetIntrHostDataWin32 *) pToken -> intrHostData;
 
 	/* paranoia */
 	if (gentoken -> type != ENET_INTR_DATA_TYPE_WIN32)
-		return -1;
+		{ ret = -1; goto clean; };
+
+	EnterCriticalSection (& pToken -> mutexData);
+	/* take unlock responsibility */
+	pMutexData = & pToken -> mutexData;
+
+	if (enet_intr_token_disabled (& pToken -> base))
+		{ ret = 0; goto clean; };
 
 	/* paranoia */
-	if (pToken -> intrHostData -> type != ENET_INTR_DATA_TYPE_WIN32)
-		return -1;
+	if (pToken -> base.intrHostData -> type != ENET_INTR_DATA_TYPE_WIN32)
+		{ ret = -1; goto clean; };
 
-	if (! SetEvent (pData -> hEventInterrupt))
-		return -1;
+	if (! SetEvent (((struct ENetIntrHostDataWin32 *) pToken -> base.intrHostData) -> hEventInterrupt))
+		{ ret = -1; goto clean; };
 
-	return 0;
+clean:
+	if (pMutexData)
+		LeaveCriticalSection (pMutexData);
+
+	return ret;
 }
 
 struct ENetIntrToken *
@@ -366,13 +405,13 @@ enet_intr_token_create_win32 (void)
 
 	pToken -> base.type = ENET_INTR_DATA_TYPE_WIN32;
 
+	pToken -> base.intrHostData = NULL;
+
 	pToken -> base.cb_token_create = enet_intr_token_create_win32;
 	pToken -> base.cb_token_destroy = enet_intr_token_destroy_win32;
 	pToken -> base.cb_token_bind = enet_intr_token_bind_win32;
 	pToken -> base.cb_token_unbind = enet_intr_token_bind_win32;
 	pToken -> base.cb_token_interrupt = enet_intr_token_interrupt_win32;
-
-	pToken -> intrHostData = NULL;
 
 	InitializeCriticalSection (& pToken -> mutexData);
 

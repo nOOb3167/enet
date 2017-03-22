@@ -365,6 +365,9 @@ struct ENetIntrHostData
 struct ENetIntrToken
 {
 	enum ENetIntrDataType type;
+
+	struct ENetIntrHostData * intrHostData;
+
 	// FIXME: this should be a private struct surely
 	struct ENetIntrToken * (*cb_token_create)(void);
 	int(*cb_token_destroy)(struct ENetIntrToken *);
@@ -391,8 +394,6 @@ struct ENetIntrHostDataWin32
 struct ENetIntrTokenWin32
 {
 	struct ENetIntrToken base;
-
-	struct ENetIntrHostData * intrHostData;
 
 	CRITICAL_SECTION mutexData;
 };
