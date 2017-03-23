@@ -400,7 +400,19 @@ struct ENetIntrTokenWin32
 
 #else
 
-// FIXME: implement
+struct ENetIntrHostDataUnix
+{
+	struct ENetIntrHostData base;
+};
+
+struct ENetIntrTokenUnix
+{
+	struct ENetIntrToken base;
+
+	pthread_t idServiceThread;
+
+	pthread_mutex_t mutexData;
+};
 
 #endif /* _WIN32 */
 
