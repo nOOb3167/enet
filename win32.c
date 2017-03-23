@@ -408,7 +408,7 @@ enet_intr_token_create_win32 (void)
 	pToken -> base.cb_token_create = enet_intr_token_create_win32;
 	pToken -> base.cb_token_destroy = enet_intr_token_destroy_win32;
 	pToken -> base.cb_token_bind = enet_intr_token_bind_win32;
-	pToken -> base.cb_token_unbind = enet_intr_token_bind_win32;
+	pToken -> base.cb_token_unbind = enet_intr_token_unbind_win32;
 	pToken -> base.cb_token_interrupt = enet_intr_token_interrupt_win32;
 
 	InitializeCriticalSection (& pToken -> mutexData);
