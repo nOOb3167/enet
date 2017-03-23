@@ -103,8 +103,8 @@ enet_host_create (const ENetAddress * address, size_t peerCount, size_t channelL
     host -> maximumPacketSize = ENET_HOST_DEFAULT_MAXIMUM_PACKET_SIZE;
     host -> maximumWaitingData = ENET_HOST_DEFAULT_MAXIMUM_WAITING_DATA;
 
-	host-> intrHostData = NULL;
-	host-> intrToken = NULL;
+	host -> intrHostData = NULL;
+	host -> intrToken = NULL;
 
     host -> compressor.context = NULL;
     host -> compressor.compress = NULL;
@@ -159,6 +159,15 @@ enet_host_destroy (ENetHost * host)
 
     if (host -> compressor.context != NULL && host -> compressor.destroy)
       (* host -> compressor.destroy) (host -> compressor.context);
+
+	/* host does not own intrToken - do not destroy it.
+	*  instead notify it with an unbind operation.
+	*  for synchronization purposes, notify before intrHostData is destroyed. */
+	if (host->intrToken)
+		host->intrToken -> cb_token_unbind (host -> intrToken, host);
+
+	if (host -> intrHostData)
+		host -> intrHostData -> cb_host_destroy (host);
 
     enet_free (host -> peers);
     enet_free (host);

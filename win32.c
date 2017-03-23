@@ -322,6 +322,10 @@ enet_intr_token_bind_win32 (struct ENetIntrToken * intrToken, ENetHost * host)
 	return 0;
 }
 
+/** To be called from ex enet_host_destroy of a host to notify the token of destruction.
+*   If the token is bound to the host, it must be disabled / unbound.
+*   If the token is not bound to the host, however, no operation need be performed on the token.
+*/
 static int
 enet_intr_token_unbind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
 {
@@ -344,7 +348,7 @@ enet_intr_token_unbind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
 
 	/* not bound to passed host? */
 	if (pToken -> base.intrHostData != host -> intrHostData)
-		{ ret = -1; goto clean; };
+		{ ret = 0; goto clean; };
 
 	pToken -> base.intrHostData = NULL;
 
