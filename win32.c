@@ -142,10 +142,10 @@ enet_intr_host_data_helper_make_event (ENetSocket socket, WSAEVENT * outputWSAEv
 static int
 enet_intr_host_data_helper_free_event (WSAEVENT * outputWSAEventSocket, HANDLE * outputHWSAEventInterrupt)
 {
-	if (! WSACloseEvent (outputWSAEventSocket))
+	if (! WSACloseEvent (* outputWSAEventSocket))
 		return -1;
 
-	if (! CloseHandle (outputHWSAEventInterrupt))
+	if (! CloseHandle (* outputHWSAEventInterrupt))
 		return -1;
 
 	return 0;
