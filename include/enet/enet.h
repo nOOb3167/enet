@@ -354,9 +354,17 @@ struct ENetIntrHostData;
 struct ENetIntrToken;
 struct ENetIntr;
 
-#define ENET_INTR_HOST_CREATE_FLAGS_VERSION_DONTCARE 0x00000000
+#define ENET_INTR_HOST_CREATE_FLAGS_VERSION_DONTCARE  0x00000000
+#define ENET_INTR_TOKEN_CREATE_FLAGS_VERSION_DONTCARE 0x00000000
 
 struct ENetIntrHostCreateFlags
+{
+	enet_uint32 version;
+	enet_uint32 notAllDefault;
+	enum ENetIntrDataType type;
+};
+
+struct ENetIntrTokenCreateFlags
 {
 	enet_uint32 version;
 	enet_uint32 notAllDefault;
@@ -391,6 +399,8 @@ struct ENetIntrToken
 struct ENetIntr {
 	void(*cb_last_chance)(struct ENetIntrToken *);
 };
+
+ENET_API struct ENetIntrToken * enet_intr_token_create (const struct ENetIntrTokenCreateFlags *flags);
 
 /** An ENet host for communicating with peers.
   *

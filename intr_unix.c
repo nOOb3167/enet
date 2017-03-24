@@ -7,9 +7,12 @@
 #define _GNU_SOURCE  // for ppoll
 
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <poll.h>
 #include <unistd.h>
 #include <signal.h>
 #include <pthread.h>
+#include <errno.h>
 
 #define ENET_BUILDING_LIB 1
 #include "enet/enet.h"

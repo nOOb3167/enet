@@ -9,7 +9,7 @@
 int
 enet_intr_host_data_already_bound_any (struct _ENetHost * host)
 {
-	return host -> intrHostData;
+	return !! host -> intrHostData;
 }
 
 /**
@@ -34,8 +34,8 @@ enet_intr_token_disabled (struct ENetIntrToken * intrToken)
 	return ! intrToken -> intrHostData;
 }
 
-struct _ENetHost *
-enet_host_create_interruptible (const struct _ENetAddress * address, size_t peerCount, size_t channelLimit, enet_uint32 incomingBandwidth, enet_uint32 outgoingBandwidth, const struct ENetIntrHostCreateFlags * flags)
+ENetHost *
+enet_host_create_interruptible (const ENetAddress * address, size_t peerCount, size_t channelLimit, enet_uint32 incomingBandwidth, enet_uint32 outgoingBandwidth, const struct ENetIntrHostCreateFlags * flags)
 {
 	ENetHost *                host         = NULL;
 	struct ENetIntrHostData * intrHostData = NULL;
@@ -87,4 +87,47 @@ enet_host_create_interruptible (const struct _ENetAddress * address, size_t peer
 	}
 
 	return host;
+}
+
+struct ENetIntrToken *
+enet_intr_token_create (const struct ENetIntrTokenCreateFlags *flags)
+{
+	struct ENetIntrToken * intrToken = NULL;
+	enum ENetIntrDataType  platformType = 0;
+	enum ENetIntrDataType  createType = flags->type;
+
+	/* FIXME: any better way of determining platform type? */
+#ifdef _WIN32
+	platformType = ENET_INTR_DATA_TYPE_WIN32;
+#else
+	platformType = ENET_INTR_DATA_TYPE_UNIX;
+#endif
+
+	if (flags->version != ENET_INTR_TOKEN_CREATE_FLAGS_VERSION_DONTCARE)
+		return NULL;
+
+	/* FIXME: any better way of defaulting the type? */
+	if (! flags->notAllDefault)
+	{
+		createType = platformType;
+	}
+
+	switch (createType)
+	{
+	case ENET_INTR_DATA_TYPE_WIN32:
+		intrToken = enet_intr_token_create_win32 ();
+		break;
+
+	case ENET_INTR_DATA_TYPE_UNIX:
+		intrToken = enet_intr_token_create_unix ();
+		break;
+
+	default:
+		break;
+	}
+
+	if (intrToken == NULL)
+		return NULL;
+
+	return intrToken;
 }
