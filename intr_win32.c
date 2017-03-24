@@ -239,7 +239,7 @@ enet_intr_token_destroy_win32 (struct ENetIntrToken * gentoken)
 {
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) gentoken;
 
-	if (gentoken -> type != ENET_INTR_DATA_TYPE_WIN32)
+	if (pToken -> base.type != ENET_INTR_DATA_TYPE_WIN32)
 		return -1;
 
 	DeleteCriticalSection (& pToken -> mutexData);
@@ -264,7 +264,7 @@ enet_intr_token_bind_win32 (struct ENetIntrToken * intrToken, ENetHost * host)
 {
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) intrToken;
 
-	if (intrToken -> type != ENET_INTR_DATA_TYPE_WIN32)
+	if (pToken -> base.type != ENET_INTR_DATA_TYPE_WIN32)
 		return -1;
 
 	EnterCriticalSection (& pToken -> mutexData);
@@ -291,7 +291,7 @@ enet_intr_token_unbind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) gentoken;
 
 	/* paranoia */
-	if (gentoken -> type != ENET_INTR_DATA_TYPE_WIN32)
+	if (pToken -> base.type != ENET_INTR_DATA_TYPE_WIN32)
 		{ ret = -1; goto clean; }
 
 	EnterCriticalSection (& pToken -> mutexData);
@@ -324,7 +324,7 @@ enet_intr_token_interrupt_win32 (struct ENetIntrToken * gentoken)
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) gentoken;
 
 	/* paranoia */
-	if (gentoken -> type != ENET_INTR_DATA_TYPE_WIN32)
+	if (pToken -> base.type != ENET_INTR_DATA_TYPE_WIN32)
 		{ ret = -1; goto clean; };
 
 	EnterCriticalSection (& pToken -> mutexData);

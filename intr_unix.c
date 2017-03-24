@@ -247,7 +247,7 @@ enet_intr_token_destroy_unix (struct ENetIntrToken * gentoken)
 {
 	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) gentoken;
 
-	if (gentoken -> type != ENET_INTR_DATA_TYPE_UNIX)
+	if (pToken -> base.type != ENET_INTR_DATA_TYPE_UNIX)
 		return -1;
 
 	pToken -> idServiceThread = 0;
@@ -281,7 +281,7 @@ enet_intr_token_bind_unix (struct ENetIntrToken * intrToken, ENetHost * host)
 {
 	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) intrToken;
 
-	if (intrToken -> type != ENET_INTR_DATA_TYPE_UNIX)
+	if (pToken -> base.type != ENET_INTR_DATA_TYPE_UNIX)
 		return -1;
 
 	if (pthread_mutex_lock (& pToken -> mutexData))
@@ -312,7 +312,7 @@ enet_intr_token_unbind_unix (struct ENetIntrToken * gentoken, ENetHost * host)
 	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) gentoken;
 
 	/* paranoia */
-	if (gentoken -> type != ENET_INTR_DATA_TYPE_UNIX)
+	if (pToken -> base.type != ENET_INTR_DATA_TYPE_UNIX)
 		{ ret = -1; goto clean; }
 
 	if (pthread_mutex_lock (& pToken -> mutexData))
@@ -349,7 +349,7 @@ enet_intr_token_interrupt_unix (struct ENetIntrToken * gentoken)
 	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) gentoken;
 
 	/* paranoia */
-	if (gentoken -> type != ENET_INTR_DATA_TYPE_UNIX)
+	if (pToken -> base.type != ENET_INTR_DATA_TYPE_UNIX)
 		{ ret = -1; goto clean; };
 
 	if (pthread_mutex_lock (& pToken -> mutexData))
