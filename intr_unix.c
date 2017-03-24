@@ -8,7 +8,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <poll.h>
+#include <sys/select.h>
 #include <unistd.h>
 #include <signal.h>
 #include <pthread.h>
@@ -18,6 +18,12 @@
 #include "enet/enet.h"
 #include "enet/intr.h"
 #include "enet/intr_unix.h"
+
+/* FIXME: missing the ifdef __APPLE__ block such as in unix.c */
+
+#if defined HAS_POLL || defined HAS_PPOLL
+#include <poll.h>
+#endif
 
 struct ENetIntrHostDataUnix
 {
@@ -51,18 +57,29 @@ enet_intr_host_token_bind(ENetHost * host, struct ENetIntrToken * intrToken)
 	return 0;
 }
 
+/** Regarding timespec use with ppoll, NULL pointer
+    timespec argument means indefinite wait.
+	Not available through this API.
+*/
+static void
+enet_unix_helper_convert_timeout_timespec (enet_uint32 timeoutMs, struct timespec *outputTimespec)
+{
+	outputTimespec->tv_sec = timeoutMs / 1000;
+	outputTimespec->tv_nsec = (timeoutMs % 1000) * 1000000;
+}
+
 static int
 enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
-#ifndef HAS_POLL
-#  error no poll - port some time
-#endif /* HAS_POLL */
-
 	if (! enet_intr_host_data_already_bound_any (host))
 		return -1;
 
 	if (enet_intr_host_token_bind (host, intrToken))
 		return -1;
+
+#if ! (defined HAS_PPOLL || defined HAS_PSELECT)
+#  error have neither ppoll nor pselect despite compiling interruption support
+#elif defined HAS_PPOLL
 
 	struct pollfd pollSocket;
 	int pollCount;
@@ -71,19 +88,8 @@ enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * co
 	sigset_t newSigSet = {};
 
 	struct timespec timespecTimeout = {};
-	struct timespec * ppollTimespecTimeout = NULL;
-
-	if (((int) timeout) < 0)
-	{
-		ppollTimespecTimeout = NULL;
-	}
-	else
-	{
-		timespecTimeout.tv_sec = timeout / 1000;
-		timespecTimeout.tv_nsec = (timeout % 1000) * 1000000;
-		ppollTimespecTimeout = & timespecTimeout;
-	}
-
+	
+	enet_unix_helper_convert_timeout_timespec (timeout, & timespecTimeout);
 
 	pollSocket.fd = host -> socket;
 	pollSocket.events = 0;
@@ -104,7 +110,7 @@ enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * co
 
 	intr->cb_last_chance (intrToken);
 
-	pollCount = ppoll (& pollSocket, 1, ppollTimespecTimeout, & oldSigSet);
+	pollCount = ppoll (& pollSocket, 1, & timespecTimeout, & oldSigSet);
 
 	if (pthread_sigmask (SIG_SETMASK, & oldSigSet, NULL))
 		return -1;
@@ -135,6 +141,71 @@ enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * co
 		* condition |= ENET_SOCKET_WAIT_RECEIVE;
 
 	return 0;
+
+#elif defined HAS_PSELECT
+
+	fd_set readSet, writeSet;
+    int selectCount;
+
+	sigset_t oldSigSet = {};
+	sigset_t newSigSet = {};
+
+	struct timespec timespecTimeout = {};
+
+	enet_unix_helper_convert_timeout_timespec (timeout, & timespecTimeout);
+
+    FD_ZERO (& readSet);
+    FD_ZERO (& writeSet);
+
+    if (* condition & ENET_SOCKET_WAIT_SEND)
+      FD_SET (socket, & writeSet);
+
+    if (* condition & ENET_SOCKET_WAIT_RECEIVE)
+      FD_SET (socket, & readSet);
+
+	/* BEGIN - magic pselect dance */
+
+	if (sigfillset (&newSigSet))
+		return -1;
+
+	if (pthread_sigmask (SIG_SETMASK, & newSigSet, & oldSigSet))
+		return -1;
+
+	intr->cb_last_chance (intrToken);
+
+    selectCount = pselect (socket + 1, & readSet, & writeSet, NULL, & timespecTimeout, & oldSigSet);
+
+	if (pthread_sigmask (SIG_SETMASK, & oldSigSet, NULL))
+		return -1;
+
+	/* END - magic pselect dance */
+
+    if (selectCount < 0)
+    {
+        if (errno == EINTR && * condition & ENET_SOCKET_WAIT_INTERRUPT)
+        {
+            * condition = ENET_SOCKET_WAIT_INTERRUPT;
+
+            return 0;
+        }
+      
+        return -1;
+    }
+
+    * condition = ENET_SOCKET_WAIT_NONE;
+
+    if (selectCount == 0)
+      return 0;
+
+    if (FD_ISSET (socket, & writeSet))
+      * condition |= ENET_SOCKET_WAIT_SEND;
+
+    if (FD_ISSET (socket, & readSet))
+      * condition |= ENET_SOCKET_WAIT_RECEIVE;
+
+    return 0;
+
+#endif
 }
 
 static int
