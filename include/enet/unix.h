@@ -44,13 +44,6 @@ typedef fd_set ENetSocketSet;
 #define ENET_SOCKETSET_ADD(sockset, socket)    FD_SET (socket, & (sockset))
 #define ENET_SOCKETSET_REMOVE(sockset, socket) FD_CLR (socket, & (sockset))
 #define ENET_SOCKETSET_CHECK(sockset, socket)  FD_ISSET (socket, & (sockset))
-
-struct _ENetHost;
-struct ENetIntrHostData;
-struct ENetIntrToken;
-
-ENET_API struct ENetIntrHostData * enet_intr_host_create_and_bind_unix (struct _ENetHost *);
-ENET_API struct ENetIntrToken *    enet_intr_token_create_unix (void);
     
 #endif /* __ENET_UNIX_H__ */
 

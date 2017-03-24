@@ -14,8 +14,10 @@ extern "C"
 
 #ifdef _WIN32
 #include "enet/win32.h"
+#include "enet/intr_win32.h"
 #else
 #include "enet/unix.h"
+#include "enet/intr_unix.h"
 #endif
 
 #include "enet/types.h"
@@ -352,6 +354,7 @@ struct ENetIntrHostData;
 struct ENetIntrToken;
 struct ENetIntr;
 
+// FIXME: this should be a private struct surely
 struct ENetIntrHostData
 {
 	enum ENetIntrDataType type;
@@ -362,13 +365,13 @@ struct ENetIntrHostData
 	int(*cb_host_socket_wait_interruptible)(struct _ENetHost *, enet_uint32 *, enet_uint32, struct ENetIntrHostData *, struct ENetIntrToken *, struct ENetIntr *);
 };
 
+// FIXME: this should be a private struct surely
 struct ENetIntrToken
 {
 	enum ENetIntrDataType type;
 
 	struct ENetIntrHostData * intrHostData;
 
-	// FIXME: this should be a private struct surely
 	struct ENetIntrToken * (*cb_token_create)(void);
 	int(*cb_token_destroy)(struct ENetIntrToken *);
 	int(*cb_token_bind)(struct ENetIntrToken *, struct _ENetHost *);
@@ -379,42 +382,6 @@ struct ENetIntrToken
 struct ENetIntr {
 	void(*cb_last_chance)(struct ENetIntrToken *);
 };
-
-// FIXME: sigh but if including win32.h / unix.h from enet.h is wanted this may be best
-#ifdef _WIN32
-
-struct ENetIntrHostDataWin32
-{
-	struct ENetIntrHostData base;
-
-	WSAEVENT EventSocket;      /**< empty value: WSA_INVALID_EVENT */
-	HANDLE   hEventInterrupt;  /**< empty value: NULL */
-};
-
-struct ENetIntrTokenWin32
-{
-	struct ENetIntrToken base;
-
-	CRITICAL_SECTION mutexData;
-};
-
-#else
-
-struct ENetIntrHostDataUnix
-{
-	struct ENetIntrHostData base;
-};
-
-struct ENetIntrTokenUnix
-{
-	struct ENetIntrToken base;
-
-	pthread_t idServiceThread;
-
-	pthread_mutex_t mutexData;
-};
-
-#endif /* _WIN32 */
 
 /** An ENet host for communicating with peers.
   *

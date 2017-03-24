@@ -1,0 +1,375 @@
+/**
+@file  intr_unix.c
+@brief ENet Unix system specific functions (interruption support)
+*/
+#ifndef _WIN32
+
+#define _GNU_SOURCE  // for ppoll
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <signal.h>
+#include <pthread.h>
+
+#define ENET_BUILDING_LIB 1
+#include "enet/enet.h"
+#include "enet/intr.h"
+#include "enet/intr_unix.h"
+
+struct ENetIntrHostDataUnix
+{
+	struct ENetIntrHostData base;
+};
+
+struct ENetIntrTokenUnix
+{
+	struct ENetIntrToken base;
+
+	pthread_t idServiceThread;
+
+	pthread_mutex_t mutexData;
+};
+
+static int
+enet_intr_host_token_bind(ENetHost * host, struct ENetIntrToken * intrToken)
+{
+	/* early exit */
+	if (enet_intr_token_already_bound (host, intrToken))
+		return 0;
+
+	if (intrToken -> type != ENET_INTR_DATA_TYPE_UNIX)
+		return -1;
+
+	if (intrToken -> cb_token_bind (intrToken, host))
+		return -1;
+
+	host -> intrToken = intrToken;
+
+	return 0;
+}
+
+static int
+enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrHostData * intrHostData, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
+{
+#ifndef HAS_POLL
+#  error no poll - port some time
+#endif /* HAS_POLL */
+
+	if (! enet_intr_host_data_already_bound (host, intrHostData))
+		return -1;
+
+	if (enet_intr_host_token_bind (host, intrToken))
+		return -1;
+
+	struct pollfd pollSocket;
+	int pollCount;
+
+	sigset_t oldSigSet = {};
+	sigset_t newSigSet = {};
+
+	struct timespec timespecTimeout = {};
+	struct timespec * ppollTimespecTimeout = NULL;
+
+	if (((int) timeout) < 0)
+	{
+		ppollTimespecTimeout = NULL;
+	}
+	else
+	{
+		timespecTimeout.tv_sec = timeout / 1000;
+		timespecTimeout.tv_nsec = (timeout % 1000) * 1000000;
+		ppollTimespecTimeout = & timespecTimeout;
+	}
+
+
+	pollSocket.fd = host -> socket;
+	pollSocket.events = 0;
+
+	if (* condition & ENET_SOCKET_WAIT_SEND)
+		pollSocket.events |= POLLOUT;
+
+	if (* condition & ENET_SOCKET_WAIT_RECEIVE)
+		pollSocket.events |= POLLIN;
+
+	/* BEGIN - magic ppoll dance */
+
+	if (sigfillset (&newSigSet))
+		return -1;
+
+	if (pthread_sigmask (SIG_SETMASK, & newSigSet, & oldSigSet))
+		return -1;
+
+	intr->cb_last_chance (intrToken);
+
+	pollCount = ppoll (& pollSocket, 1, ppollTimespecTimeout, & oldSigSet);
+
+	if (pthread_sigmask (SIG_SETMASK, & oldSigSet, NULL))
+		return -1;
+
+	/* END - magic ppoll dance */
+
+	if (pollCount < 0)
+	{
+		if (errno == EINTR && * condition & ENET_SOCKET_WAIT_INTERRUPT)
+		{
+			* condition = ENET_SOCKET_WAIT_INTERRUPT;
+
+			return 0;
+		}
+
+		return -1;
+	}
+
+	* condition = ENET_SOCKET_WAIT_NONE;
+
+	if (pollCount == 0)
+		return 0;
+
+	if (pollSocket.revents & POLLOUT)
+		* condition |= ENET_SOCKET_WAIT_SEND;
+
+	if (pollSocket.revents & POLLIN)
+		* condition |= ENET_SOCKET_WAIT_RECEIVE;
+
+	return 0;
+}
+
+static int
+enet_intr_host_bind_unix (ENetHost * host, struct ENetIntrHostData * intrHostData)
+{
+	if (enet_intr_host_data_already_bound (host, intrHostData))
+		return 0;
+
+	if (intrHostData -> type != ENET_INTR_DATA_TYPE_UNIX)
+		return -1;
+
+	/* would overwrite existing */
+	if (host -> intrHostData)
+		return -1;
+
+	host -> intrHostData = intrHostData;
+
+	return 0;
+}
+
+static int
+enet_intr_host_destroy_unix (struct _ENetHost * host)
+{
+	struct ENetIntrHostDataUnix * pData = (struct ENetIntrHostDataUnix *) host -> intrHostData;
+
+	if (! pData)
+		return 0;
+
+	if (pData -> base.type != ENET_INTR_DATA_TYPE_UNIX)
+		return -1;
+
+	enet_free (pData);
+
+	return 0;
+}
+
+static int
+enet_intr_token_destroy_unix (struct ENetIntrToken * gentoken)
+{
+	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) gentoken;
+
+	if (gentoken -> type != ENET_INTR_DATA_TYPE_UNIX)
+		return -1;
+
+	pToken -> idServiceThread = 0;
+
+	if (pthread_mutex_destroy (& pToken -> mutexData))
+		return -1;
+
+	enet_free (pToken);
+
+	return 0;
+}
+
+/** Blindly overwrite token with new host (unless already bound to it).
+    If token is already bound to a host it will not be unbound
+	from the old host or anything.
+
+	Calls to this function are designed to be triggered from the ENetHost host.
+	- Host has to ensure read access to intrHostData field is safe
+	(sequencing, no conflicting writes, field not yet destroyed, etc).
+	Ensuring this seemingly should not require locking at the host side.
+	(ex since calls are only triggered from the host)
+	- The current thread id will be recorded for interruption purposes.
+	Obviously (?), calling host functions that trigger bind from different
+	threads will result in this identifier being outdated.
+	The 'last_chance' mechanism is designed to compensate.
+	(bind and last_chance will be performed in order, from the same thread,
+	 allowing such current thread id to be updated)
+*/
+static int
+enet_intr_token_bind_unix (struct ENetIntrToken * intrToken, ENetHost * host)
+{
+	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) intrToken;
+
+	if (intrToken -> type != ENET_INTR_DATA_TYPE_UNIX)
+		return -1;
+
+	if (pthread_mutex_lock (& pToken -> mutexData))
+		return -1;
+
+	/* bind on token side */
+	pToken -> base.intrHostData = host -> intrHostData;
+
+	pToken -> idServiceThread = pthread_self ();
+
+	if (pthread_mutex_unlock (& pToken -> mutexData))
+		return -1;
+
+	return 0;
+}
+
+/** To be called from ex enet_host_destroy of a host to notify the token of destruction.
+*   If the token is bound to the host, it must be disabled / unbound.
+*   If the token is not bound to the host, however, no operation need be performed on the token.
+*/
+static int
+enet_intr_token_unbind_unix (struct ENetIntrToken * gentoken, ENetHost * host)
+{
+	int ret = 0;
+
+	pthread_mutex_t * pMutexData = NULL;
+
+	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) gentoken;
+
+	/* paranoia */
+	if (gentoken -> type != ENET_INTR_DATA_TYPE_UNIX)
+		{ ret = -1; goto clean; }
+
+	if (pthread_mutex_lock (& pToken -> mutexData))
+		{ ret = -1; goto clean; }
+	/* take unlock responsibility */
+	pMutexData = & pToken -> mutexData;
+
+	if (enet_intr_token_disabled (& pToken -> base))
+		{ ret = 0; goto clean; };
+
+	/* not bound to passed host? */
+	if (pToken -> base.intrHostData != host -> intrHostData)
+		{ ret = 0; goto clean; };
+
+	pToken -> base.intrHostData = NULL;
+
+	pToken -> idServiceThread = 0;
+
+clean:
+	if (pMutexData)
+		if (pthread_mutex_unlock (pMutexData))
+			{ /* dummy */ }
+
+	return ret;
+}
+
+static int
+enet_intr_token_interrupt_unix (struct ENetIntrToken * gentoken)
+{
+	int ret = 0;
+
+	pthread_mutex_t * pMutexData = NULL;
+
+	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) gentoken;
+
+	/* paranoia */
+	if (gentoken -> type != ENET_INTR_DATA_TYPE_UNIX)
+		{ ret = -1; goto clean; };
+
+	if (pthread_mutex_lock (& pToken -> mutexData))
+		{ ret = -1; goto clean; }
+	/* take unlock responsibility */
+	pMutexData = & pToken -> mutexData;
+
+	if (enet_intr_token_disabled (& pToken -> base))
+		{ ret = 0; goto clean; };
+
+	/* paranoia */
+	if (pToken -> base.intrHostData -> type != ENET_INTR_DATA_TYPE_UNIX)
+		{ ret = -1; goto clean; };
+
+	/* FIXME: hardcoded SIGUSR1 - make this configurable (likely at token creation) */
+	if (pthread_kill (pToken -> idServiceThread, SIGUSR1))
+		return -1;
+
+clean:
+	if (pMutexData)
+		if (pthread_mutex_unlock (pMutexData))
+			{ /* dummy */ }
+
+	return ret;
+}
+
+struct ENetIntrHostData *
+enet_intr_host_create_and_bind_unix (struct _ENetHost * host)
+{
+	struct ENetIntrHostDataUnix *pData = (struct ENetIntrHostDataUnix *) enet_malloc (sizeof(struct ENetIntrHostDataUnix));
+
+	if (! pData)
+		return NULL;
+
+	pData -> base.type = ENET_INTR_DATA_TYPE_UNIX;
+
+	pData -> base.cb_host_create = enet_intr_host_create_and_bind_unix;
+	pData -> base.cb_host_destroy = enet_intr_host_destroy_unix;
+	pData -> base.cb_host_bind = enet_intr_host_bind_unix;
+	pData -> base.cb_host_socket_wait_interruptible = enet_intr_host_socket_wait_interruptible_unix;
+
+	/* bind to host */
+
+	if (pData -> base.cb_host_bind (host, (struct ENetIntrHostData *) pData))
+	{
+		enet_free (pData);
+
+		return NULL;
+	}
+
+	return & pData -> base;
+}
+
+struct ENetIntrToken *
+enet_intr_token_create_unix (void)
+{
+	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) enet_malloc (sizeof (struct ENetIntrTokenUnix));
+
+	pthread_mutexattr_t mutexAttr = {};
+
+	if (!pToken)
+		return NULL;
+
+	pToken -> base.type = ENET_INTR_DATA_TYPE_UNIX;
+
+	pToken -> base.intrHostData = NULL;
+
+	pToken -> base.cb_token_create = enet_intr_token_create_unix;
+	pToken -> base.cb_token_destroy = enet_intr_token_destroy_unix;
+	pToken -> base.cb_token_bind = enet_intr_token_bind_unix;
+	pToken -> base.cb_token_unbind = enet_intr_token_unbind_unix;
+	pToken -> base.cb_token_interrupt = enet_intr_token_interrupt_unix;
+
+	pToken -> idServiceThread = 0;
+
+	if (pthread_mutexattr_init (& mutexAttr))
+		return NULL;
+
+	if (pthread_mutexattr_settype (& mutexAttr, PTHREAD_MUTEX_RECURSIVE))
+		return NULL;
+
+	if (pthread_mutex_init (& pToken -> mutexData, & mutexAttr))
+		return NULL;
+
+	if (pthread_mutexattr_destroy (& mutexAttr))
+		return NULL;
+
+	if (pthread_mutex_lock (& pToken -> mutexData))
+		return NULL;
+
+	if (pthread_mutex_unlock (& pToken -> mutexData))
+		return NULL;
+
+	return & pToken -> base;
+}
+
+#endif /* _WIN32 */
