@@ -49,13 +49,13 @@ enet_intr_host_token_bind(ENetHost * host, struct ENetIntrToken * intrToken)
 }
 
 static int
-enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrHostData * intrHostData, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
+enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
 #ifndef HAS_POLL
 #  error no poll - port some time
 #endif /* HAS_POLL */
 
-	if (! enet_intr_host_data_already_bound (host, intrHostData))
+	if (! enet_intr_host_data_already_bound_any (host))
 		return -1;
 
 	if (enet_intr_host_token_bind (host, intrToken))
@@ -300,6 +300,18 @@ clean:
 			{ /* dummy */ }
 
 	return ret;
+}
+
+struct ENetIntrHostData *
+enet_intr_host_create_and_bind_win32 (struct _ENetHost * host)
+{
+	return NULL;
+}
+
+struct ENetIntrToken *
+enet_intr_token_create_win32 (void)
+{
+	return NULL;
 }
 
 struct ENetIntrHostData *

@@ -354,6 +354,15 @@ struct ENetIntrHostData;
 struct ENetIntrToken;
 struct ENetIntr;
 
+#define ENET_INTR_HOST_CREATE_FLAGS_VERSION_DONTCARE 0x00000000
+
+struct ENetIntrHostCreateFlags
+{
+	enet_uint32 version;
+	enet_uint32 notAllDefault;
+	enum ENetIntrDataType type;
+};
+
 // FIXME: this should be a private struct surely
 struct ENetIntrHostData
 {
@@ -362,7 +371,7 @@ struct ENetIntrHostData
 	struct ENetIntrHostData * (*cb_host_create)(struct _ENetHost *);
 	int(*cb_host_destroy)(struct _ENetHost * host);
 	int(*cb_host_bind)(struct _ENetHost *, struct ENetIntrHostData *);
-	int(*cb_host_socket_wait_interruptible)(struct _ENetHost *, enet_uint32 *, enet_uint32, struct ENetIntrHostData *, struct ENetIntrToken *, struct ENetIntr *);
+	int(*cb_host_socket_wait_interruptible)(struct _ENetHost *, enet_uint32 *, enet_uint32, struct ENetIntrToken *, struct ENetIntr *);
 };
 
 // FIXME: this should be a private struct surely
@@ -591,13 +600,13 @@ ENET_API ENetPacket * enet_packet_create (const void *, size_t, enet_uint32);
 ENET_API void         enet_packet_destroy (ENetPacket *);
 ENET_API int          enet_packet_resize  (ENetPacket *, size_t);
 ENET_API enet_uint32  enet_crc32 (const ENetBuffer *, size_t);
-                
 ENET_API ENetHost * enet_host_create (const ENetAddress *, size_t, size_t, enet_uint32, enet_uint32);
+ENET_API ENetHost * enet_host_create_interruptible (const ENetAddress *, size_t, size_t, enet_uint32, enet_uint32, const struct ENetIntrHostCreateFlags *);
 ENET_API void       enet_host_destroy (ENetHost *);
 ENET_API ENetPeer * enet_host_connect (ENetHost *, const ENetAddress *, size_t, enet_uint32);
 ENET_API int        enet_host_check_events (ENetHost *, ENetEvent *);
 ENET_API int        enet_host_service (ENetHost *, ENetEvent *, enet_uint32);
-ENET_API int        enet_host_service_interruptible (ENetHost *, ENetEvent *, enet_uint32, struct ENetIntrHostData *, struct ENetIntrToken *, struct ENetIntr *);
+ENET_API int        enet_host_service_interruptible (ENetHost *, ENetEvent *, enet_uint32, struct ENetIntrToken *, struct ENetIntr *);
 ENET_API void       enet_host_flush (ENetHost *);
 ENET_API void       enet_host_broadcast (ENetHost *, enet_uint8, ENetPacket *);
 ENET_API void       enet_host_compress (ENetHost *, const ENetCompressor *);

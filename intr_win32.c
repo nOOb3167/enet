@@ -156,11 +156,11 @@ enet_intr_host_token_bind(ENetHost * host, struct ENetIntrToken * intrToken)
 }
 
 static int
-enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrHostData * intrHostData, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
+enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
 	int retSocketWait = 0;
 
-	if (! enet_intr_host_data_already_bound (host, intrHostData))
+	if (! enet_intr_host_data_already_bound_any (host))
 		return -1;
 
 	if (enet_intr_host_token_bind (host, intrToken))
@@ -403,6 +403,18 @@ enet_intr_token_create_win32 (void)
 	LeaveCriticalSection (& pToken -> mutexData);
 
 	return & pToken -> base;
+}
+
+struct ENetIntrHostData *
+enet_intr_host_create_and_bind_unix (struct _ENetHost * host)
+{
+	return NULL;
+}
+
+struct ENetIntrToken *
+enet_intr_token_create_unix (void)
+{
+	return NULL;
 }
 
 #endif /* _WIN32 */
