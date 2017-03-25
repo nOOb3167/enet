@@ -1,6 +1,41 @@
 /**
 @file  intr_win32.c
 @brief ENet Win32 system specific functions (interruption support)
+
+This interruption support method relies on WSAEventSelect.
+The general WSAEventSelect code flow is described below.
+
+@code{.c}
+WSAEVENT SocketEvent = WSACreateEvent ();
+WSAEventSelect (socket, SocketEvent, FD_READ);
+@endcode
+
+WSAEventSelect associates an event with a socket.
+The socket event association will cause the event to be signalled on network activity.
+
+@code{.c}
+HANDLE InterruptEvent = CreateEvent ();
+@endcode
+
+Another (programmatically signallizable) event can be created.
+This second event can be signalled (using SetEvent) when interruption desired.
+
+@code{.c}
+EventArray[0] = InterruptEvent;
+EventArray[1] = SocketEvent;
+WSAWaitForMultipleEvents (..., EventArray, ...);
+if (wait_completed_due_to_socket_event)
+    WSAEnumNetworkEvents (..., SocketEvent, events);
+@endcode
+
+WSAWaitForMultipleEvents is used to wait for an event to become signalled.
+It is possible to determine which of the events caused the call to complete.
+
+To implement interruption, having the call complete is all that is needed.
+
+To allow reacting to network events, WSAEnumNetworkEvents allows checking
+for events arrived since the last WSAEnumNetworkEvents call.
+
 */
 #ifdef _WIN32
 
@@ -96,6 +131,14 @@ enet_intr_host_data_helper_event_wait (ENetHost * host, enet_uint32 timeoutMsec)
 		return 2;
 }
 
+/** The WSAEnumNetworkEvents part of the WSAEventSelect pattern.
+
+	With respect to the (non-)handling of write events, see ::enet_intr_host_data_helper_make_event .
+
+	@param[in,out] condition input mask of events to check for.
+				   (but only ENET_SOCKET_WAIT_RECEIVE and ENET_SOCKET_WAIT_SEND)
+				   output mask of events that have occurred / are ready for processing.
+*/
 static int
 enet_intr_host_data_helper_event_enum (ENetHost * host, enet_uint32 * condition)
 {
@@ -135,6 +178,12 @@ enet_intr_host_data_helper_event_enum (ENetHost * host, enet_uint32 * condition)
 }
 
 /** Create both events (for Interruption and for Socket activity).
+
+	With respect to the FD_READ mask, see
+	<a href="https://msdn.microsoft.com/en-us/library/windows/desktop/ms741576(v=vs.85).aspx">the following MSDN page(click link)</a>:
+	"""The FD_WRITE network event is handled slightly differently. ...""".
+	It does not seem including FD_WRITE has useful semantics.
+
 */
 static int
 enet_intr_host_data_helper_make_event (ENetSocket socket, WSAEVENT * outputWSAEventSocket, HANDLE * outputHWSAEventInterrupt)
@@ -168,6 +217,8 @@ enet_intr_host_data_helper_free_event (WSAEVENT * outputWSAEventSocket, HANDLE *
 	return 0;
 }
 
+/** Delegate binding to the passed-in token, and finish up by setting host -> intrToken.
+*/
 static int
 enet_intr_host_token_bind(ENetHost * host, struct ENetIntrToken * intrToken)
 {
@@ -186,6 +237,16 @@ enet_intr_host_token_bind(ENetHost * host, struct ENetIntrToken * intrToken)
 	return 0;
 }
 
+/**
+
+	The following condition states may be output:
+	- ENET_SOCKET_WAIT_NONE: no events have in fact occurred.
+	- ENET_SOCKET_WAIT_INTERRUPT: an interruption occurred.
+	- combination of ENET_SOCKET_WAIT_RECEIVE and ENET_SOCKET_WAIT_SEND: a network event occurred.
+
+    @param[in,out] condition input mask of events to check for.
+							 output mask of events that have occurred.
+*/
 static int
 enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
@@ -207,23 +268,16 @@ enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * c
 	if (retSocketWait == 0)
 	{
 		* condition = ENET_SOCKET_WAIT_NONE;
-
-		return 0;
 	}
-
-	if (retSocketWait == 1)
+	else if (retSocketWait == 1)
 	{
 		* condition = ENET_SOCKET_WAIT_INTERRUPT;
-
-		return 0;
 	}
-
-	/* should not happen */
-	if (retSocketWait != 2)
-		return -1;
-
-	if (enet_intr_host_data_helper_event_enum (host, condition))
-		return -1;
+	else if (retSocketWait == 2)
+	{
+		if (enet_intr_host_data_helper_event_enum (host, condition))
+			return -1;
+	}
 
 	return 0;
 }
@@ -231,6 +285,7 @@ enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * c
 static int
 enet_intr_host_bind_win32 (ENetHost * host, struct ENetIntrHostData * intrHostData)
 {
+	/* FIXME: this might be an error instead of a no-op surely? */
 	if (enet_intr_host_data_already_bound (host, intrHostData))
 		return 0;
 
@@ -315,34 +370,31 @@ enet_intr_token_bind_win32 (struct ENetIntrToken * intrToken, ENetHost * host)
 static int
 enet_intr_token_unbind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
 {
-	int ret = 0;
-
-	LPCRITICAL_SECTION pMutexData = NULL;
-
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) gentoken;
 
-	/* paranoia */
 	if (pToken -> base.type != ENET_INTR_DATA_TYPE_WIN32)
-		{ ret = -1; goto clean; }
+		return -1;
 
 	EnterCriticalSection (& pToken -> mutexData);
-	/* take unlock responsibility */
-	pMutexData = & pToken -> mutexData;
 
 	if (enet_intr_token_disabled (& pToken -> base))
-		{ ret = 0; goto clean; };
+	{
+		LeaveCriticalSection(& pToken -> mutexData);
+
+		return 0;
+	}
 
 	/* not bound to passed host? */
 	if (pToken -> base.intrHostData != host -> intrHostData)
-		{ ret = 0; goto clean; };
+	{
+		LeaveCriticalSection(& pToken -> mutexData);
+
+		return 0;
+	}
 
 	pToken -> base.intrHostData = NULL;
 
-clean:
-	if (pMutexData)
-		LeaveCriticalSection (pMutexData);
-
-	return ret;
+	return 0;
 }
 
 static int
@@ -352,31 +404,38 @@ enet_intr_token_interrupt_win32 (struct ENetIntrToken * gentoken)
 
 	LPCRITICAL_SECTION pMutexData = NULL;
 
-	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) gentoken;
+	struct ENetIntrTokenWin32 *    pToken = (struct ENetIntrTokenWin32 *) gentoken;
+	struct ENetIntrHostDataWin32 * pData =  (struct ENetIntrHostDataWin32 *) gentoken -> intrHostData;
 
-	/* paranoia */
 	if (pToken -> base.type != ENET_INTR_DATA_TYPE_WIN32)
-		{ ret = -1; goto clean; };
+		return -1;
 
 	EnterCriticalSection (& pToken -> mutexData);
-	/* take unlock responsibility */
-	pMutexData = & pToken -> mutexData;
 
 	if (enet_intr_token_disabled (& pToken -> base))
-		{ ret = 0; goto clean; };
+	{
+		LeaveCriticalSection(& pToken -> mutexData);
 
-	/* paranoia */
-	if (pToken -> base.intrHostData -> type != ENET_INTR_DATA_TYPE_WIN32)
-		{ ret = -1; goto clean; };
+		return 0;
+	}
 
-	if (! SetEvent (((struct ENetIntrHostDataWin32 *) pToken -> base.intrHostData) -> hEventInterrupt))
-		{ ret = -1; goto clean; };
+	/* NOTE: withing lock and after disablement check
+	*        ensure eg synchronization against host destruction */
+	if (pData -> base.type != ENET_INTR_DATA_TYPE_WIN32)
+	{
+		LeaveCriticalSection(& pToken -> mutexData);
 
-clean:
-	if (pMutexData)
-		LeaveCriticalSection (pMutexData);
+		return -1;
+	}
 
-	return ret;
+	if (! SetEvent (pData -> hEventInterrupt))
+	{
+		LeaveCriticalSection(& pToken -> mutexData);
+
+		return -1;
+	}
+
+	return 0;
 }
 
 struct ENetIntrHostData *
