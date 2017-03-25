@@ -348,8 +348,6 @@ enum ENetIntrDataType
 	ENET_INTR_DATA_TYPE_WIN32 = 0xABCDEF56,
 };
 
-struct _ENetHost;
-
 struct ENetIntrHostData;
 struct ENetIntrToken;
 struct ENetIntr;
@@ -357,6 +355,7 @@ struct ENetIntr;
 #define ENET_INTR_HOST_CREATE_FLAGS_VERSION_DONTCARE  0x00000000
 #define ENET_INTR_TOKEN_CREATE_FLAGS_VERSION_DONTCARE 0x00000000
 
+// FIXME: this should be a private struct surely
 struct ENetIntrHostCreateFlags
 {
 	enet_uint32 version;
@@ -364,6 +363,7 @@ struct ENetIntrHostCreateFlags
 	enum ENetIntrDataType type;
 };
 
+// FIXME: this should be a private struct surely
 struct ENetIntrTokenCreateFlags
 {
 	enet_uint32 version;
