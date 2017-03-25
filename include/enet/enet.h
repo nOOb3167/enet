@@ -400,7 +400,8 @@ struct ENetIntr {
 	void(*cb_last_chance)(struct ENetIntrToken *);
 };
 
-ENET_API struct ENetIntrToken * enet_intr_token_create (const struct ENetIntrTokenCreateFlags *flags);
+ENET_API struct ENetIntrTokenCreateFlags * enet_intr_token_create_flags_create (enum ENetIntrDataType type);
+ENET_API struct ENetIntrToken *            enet_intr_token_create (const struct ENetIntrTokenCreateFlags *flags);
 
 /** An ENet host for communicating with peers.
   *

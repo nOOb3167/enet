@@ -24,11 +24,23 @@
 #include <poll.h>
 #endif
 
+#define ENET_UNIX_DEFAULT_SIGNO SIGUSR1
+
+/** @sa ::enet_intr_host_create_and_bind_unix */
 struct ENetIntrHostDataUnix
 {
 	struct ENetIntrHostData base;
 };
 
+/** @sa ::enet_intr_token_create_flags_create_unix */
+struct ENetIntrTokenCreateFlagsUnix
+{
+	struct ENetIntrTokenCreateFlags base;
+
+	int signo;
+};
+
+/** @sa ::enet_intr_token_create_unix */
 struct ENetIntrTokenUnix
 {
 	struct ENetIntrToken base;
@@ -375,8 +387,29 @@ enet_intr_token_interrupt_unix (struct ENetIntrToken * gentoken)
 	return 0;
 }
 
+int
+enet_intr_token_create_flags_set_signo (struct ENetIntrTokenCreateFlags * flags, int signo)
+{
+	struct ENetIntrTokenCreateFlagsUnix * pFlags = (struct ENetIntrTokenCreateFlagsUnix *) flags;
+
+	if (pFlags -> base.type != ENET_INTR_DATA_TYPE_UNIX)
+		return -1;
+	
+	pFlags -> base.notAllDefault = 1;
+
+	pFlags -> signo = signo;
+
+	return 0;
+}
+
 struct ENetIntrHostData *
 enet_intr_host_create_and_bind_win32 (struct _ENetHost * host)
+{
+	return NULL;
+}
+
+struct ENetIntrTokenCreateFlags *
+enet_intr_token_create_flags_create_win32 (void)
 {
 	return NULL;
 }
@@ -412,6 +445,21 @@ enet_intr_host_create_and_bind_unix (struct _ENetHost * host)
 	}
 
 	return & pData -> base;
+}
+
+struct ENetIntrTokenCreateFlags *
+enet_intr_token_create_flags_create_unix (void)
+{
+	struct ENetIntrTokenCreateFlagsUnix * pFlags = (struct ENetIntrTokenCreateFlagsUnix *) enet_malloc (sizeof (struct ENetIntrTokenCreateFlagsUnix));
+
+	pFlags -> base.type = ENET_INTR_DATA_TYPE_UNIX;
+
+	pFlags -> base.version = ENET_INTR_TOKEN_CREATE_FLAGS_VERSION_DONTCARE;
+	pFlags -> base.notAllDefault = 0;
+
+	pFlags -> signo = ENET_UNIX_DEFAULT_SIGNO;
+
+	return & pFlags -> base;
 }
 
 struct ENetIntrToken *

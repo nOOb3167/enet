@@ -44,6 +44,7 @@ for events arrived since the last WSAEnumNetworkEvents call.
 #include "enet/intr_win32.h"
 #include <windows.h>
 
+/** @sa ::enet_intr_host_create_and_bind_win32 */
 struct ENetIntrHostDataWin32
 {
 	struct ENetIntrHostData base;
@@ -52,6 +53,13 @@ struct ENetIntrHostDataWin32
 	HANDLE   hEventInterrupt;  /**< empty value: NULL */
 };
 
+/** @sa ::enet_intr_token_create_flags_create_win32 */
+struct ENetIntrTokenCreateFlagsWin32
+{
+	struct ENetIntrTokenCreateFlags base;
+};
+
+/** @sa ::enet_intr_token_create_win32 */
 struct ENetIntrTokenWin32
 {
 	struct ENetIntrToken base;
@@ -468,6 +476,19 @@ enet_intr_host_create_and_bind_win32 (struct _ENetHost * host)
 	return & pData -> base;
 }
 
+struct ENetIntrTokenCreateFlags *
+enet_intr_token_create_flags_create_win32 (void)
+{
+	struct ENetIntrTokenCreateFlagsWin32 * pFlags = (struct ENetIntrTokenCreateFlagsWin32 *) enet_malloc (sizeof (struct ENetIntrTokenCreateFlagsWin32));
+
+	pFlags -> base.type = ENET_INTR_DATA_TYPE_WIN32;
+
+	pFlags -> base.version = ENET_INTR_TOKEN_CREATE_FLAGS_VERSION_DONTCARE;
+	pFlags -> base.notAllDefault = 0;
+
+	return & pFlags -> base;
+}
+
 struct ENetIntrToken *
 enet_intr_token_create_win32 (void)
 {
@@ -496,6 +517,12 @@ enet_intr_token_create_win32 (void)
 
 struct ENetIntrHostData *
 enet_intr_host_create_and_bind_unix (struct _ENetHost * host)
+{
+	return NULL;
+}
+
+struct ENetIntrTokenCreateFlags *
+enet_intr_token_create_flags_create_unix (void)
 {
 	return NULL;
 }

@@ -108,6 +108,7 @@ file(GLOB HDR_ALL
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/callbacks.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/enet.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/intr.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/include/enet/intr_defs.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/list.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/protocol.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/time.h"
