@@ -37,7 +37,6 @@ To allow reacting to network events, WSAEnumNetworkEvents allows checking
 for events arrived since the last WSAEnumNetworkEvents call.
 
 */
-#ifdef _WIN32
 
 #define ENET_BUILDING_LIB 1
 #include "enet/enet.h"
@@ -506,5 +505,3 @@ enet_intr_token_create_unix (void)
 {
 	return NULL;
 }
-
-#endif /* _WIN32 */

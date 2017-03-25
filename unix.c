@@ -2,7 +2,6 @@
  @file  unix.c
  @brief ENet Unix system specific functions
 */
-#ifndef _WIN32
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -605,6 +604,3 @@ enet_socket_wait (ENetSocket socket, enet_uint32 * condition, enet_uint32 timeou
     return 0;
 #endif
 }
-
-#endif
-

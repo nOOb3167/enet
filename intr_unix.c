@@ -2,7 +2,6 @@
 @file  intr_unix.c
 @brief ENet Unix system specific functions (interruption support)
 */
-#ifndef _WIN32
 
 #define _GNU_SOURCE  // for ppoll
 
@@ -457,5 +456,3 @@ enet_intr_token_create_unix (void)
 
 	return & pToken -> base;
 }
-
-#endif /* _WIN32 */

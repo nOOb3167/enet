@@ -60,35 +60,70 @@ endif()
  
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
+file(GLOB SRC_UNIX
+    "${CMAKE_CURRENT_SOURCE_DIR}/unix.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/intr_unix.c"
+)
+
+file(GLOB SRC_WIN32
+    "${CMAKE_CURRENT_SOURCE_DIR}/win32.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/intr_win32.c"
+)
+
+file(GLOB HDR_UNIX
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/unix.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/intr_unix.h"
+)
+
+file(GLOB HDR_WIN32
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/win32.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/intr_win32.h"
+)
+
+if (WIN32)
+    set(SRC_PLATFORM       ${SRC_WIN32})
+	set(HDR_PLATFORM       ${HDR_WIN32})
+    set(SRC_OTHER_PLATFORM ${SRC_UNIX})
+	set(HDR_OTHER_PLATFORM ${HDR_UNIX})
+else ()
+    set(SRC_PLATFORM       ${SRC_UNIX})
+	set(HDR_PLATFORM       ${HDR_UNIX})
+    set(SRC_OTHER_PLATFORM ${SRC_WIN32})
+	set(HDR_OTHER_PLATFORM ${HDR_WIN32})
+endif ()
+
 file(GLOB SRC_ALL
     "${CMAKE_CURRENT_SOURCE_DIR}/callbacks.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/compress.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/host.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/intr.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/intr_win32.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/intr_unix.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/list.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/packet.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/peer.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/protocol.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/unix.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/win32.c"
+	${SRC_PLATFORM}
 )
 
 file(GLOB HDR_ALL
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/callbacks.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/enet.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/intr.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/intr_win32.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/intr_unix.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/list.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/protocol.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/time.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/types.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/unix.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/utility.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/enet/win32.h"
+	${HDR_PLATFORM}
 )
+
+IF (WIN32)
+    set(OTHER_PLATFORM_FILES ${SRC_OTHER_PLATFORM} ${HDR_OTHER_PLATFORM})
+	# prevent compilation (setting HEADER_FILE_ONLY), ensure files used in project (creating dummy library)
+	# show files under a custom filter / source group
+	set_source_files_properties(${OTHER_PLATFORM_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
+	add_library(dummy_lib STATIC ${OTHER_PLATFORM_FILES})
+	source_group("Platform Files" FILES ${OTHER_PLATFORM_FILES})
+ENDIF ()
 
 # Visual Studio specific (Filters / Source Groups)
 source_group("Source Files" FILES ${SRC_ALL})
