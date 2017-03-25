@@ -27,6 +27,38 @@ struct ENetIntrTokenWin32
 
 /** Perform similar role as poll(2).
 
+	The Win32 API function WSAWaitForMultipleEvents is presumably
+	able to wait both on WSA Events (ex created with WSACreateEvent)
+	and 'normal' events (ex created with CreateEvent).
+
+	<a href="https://blogs.msdn.microsoft.com/geoffda/2008/08/18/beware-of-auto-reset-events-they-dont-behave-the-way-you-think-they-do/">However (click link)</a>
+	there appear to be some reports of <b>auto-reset</b> 'normal' events interacting poorly with waits.
+
+	@code{.c}
+	HANDLE hEvent[2] = {};
+	hEvent[0] = CreateEvent(NULL, FALSE, FALSE, NULL);
+	hEvent[1] = CreateEvent(NULL, FALSE, FALSE, NULL);
+	SetEvent(hEvent[0]);
+	SetEvent(hEvent[1]);
+	while (true) {
+	    DWORD ret = WaitForMultipleObjects(2, hEvent, FALSE, 1000);
+		printf("ret [%d]\n", (int)ret);
+	}
+	printf("end\n");
+	@endcode
+
+	@verbatim
+	ret [0]    // WaitForMultipleObjects succeeds with first event
+	ret [1]    // WaitForMultipleObjects succeeds with second event
+	ret [258]  // timeout return code
+	...
+	@endverbatim
+
+	Interpret the result of the code above as follows:
+	An <b>auto-reset</b> event that has been set (ex SetEvent), is not reset by WaitForMultipleObjects,
+	unless it is the one that actually caused the wait call to complete.
+	Thus after <b>ret [0]</b> we have <b>ret [1]</b>, as only the first event has reset in the first loop iteration.
+
 	@retval > 0 if an event occurred within the specified time limit.
 	            specifically: 1 on interrupt and 2 on socket event.
 	@retval 0 if no event occurred
@@ -35,7 +67,7 @@ struct ENetIntrTokenWin32
 static int
 enet_intr_host_data_helper_event_wait (ENetHost * host, enet_uint32 timeoutMsec)
 {
-	struct ENetIntrHostDataWin32 * data = (struct ENetIntrHostDataWin32 *) host -> intrHostData;
+	struct ENetIntrHostDataWin32 * pHostData = (struct ENetIntrHostDataWin32 *) host -> intrHostData;
 
 	/* FIXME: can use both WSACreateEvent and CreateEvent events
 	*    in WSAWaitForMultipleEvents but is the type WSAEVENT or HANDLE? */
@@ -44,12 +76,11 @@ enet_intr_host_data_helper_event_wait (ENetHost * host, enet_uint32 timeoutMsec)
 	DWORD ret = 0;
 	DWORD indexSignaled = 0;
 
-	/* should not happen */
 	if (host -> intrHostData -> type != ENET_INTR_DATA_TYPE_WIN32)
 		return -1;
 
-	EventArray[0] = data -> hEventInterrupt;
-	EventArray[1] = data -> EventSocket;
+	EventArray[0] = pHostData -> hEventInterrupt;
+	EventArray[1] = pHostData -> EventSocket;
 
 	/* FIXME: timeout handling? special negative timeout value (as poll(2))? set fAlertable for alertable wait? */
 	ret = WSAWaitForMultipleEvents (2, EventArray, FALSE, timeoutMsec, FALSE);
