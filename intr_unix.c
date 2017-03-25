@@ -304,75 +304,75 @@ enet_intr_token_bind_unix (struct ENetIntrToken * intrToken, ENetHost * host)
 static int
 enet_intr_token_unbind_unix (struct ENetIntrToken * gentoken, ENetHost * host)
 {
-	int ret = 0;
-
-	pthread_mutex_t * pMutexData = NULL;
-
 	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) gentoken;
 
-	/* paranoia */
 	if (pToken -> base.type != ENET_INTR_DATA_TYPE_UNIX)
-		{ ret = -1; goto clean; }
+		return -1;
 
 	if (pthread_mutex_lock (& pToken -> mutexData))
-		{ ret = -1; goto clean; }
-	/* take unlock responsibility */
-	pMutexData = & pToken -> mutexData;
+		return -1;
 
 	if (enet_intr_token_disabled (& pToken -> base))
-		{ ret = 0; goto clean; };
+	{
+		if (pthread_mutex_unlock (& pToken -> mutexData))
+			return -1;
+
+		return 0;
+	}
 
 	/* not bound to passed host? */
 	if (pToken -> base.intrHostData != host -> intrHostData)
-		{ ret = 0; goto clean; };
+	{
+		if (pthread_mutex_unlock (& pToken -> mutexData))
+			return -1;
+
+		return 0;
+	}
 
 	pToken -> base.intrHostData = NULL;
 
 	pToken -> idServiceThread = 0;
 
-clean:
-	if (pMutexData)
-		if (pthread_mutex_unlock (pMutexData))
-			{ /* dummy */ }
-
-	return ret;
+	return 0;
 }
 
 static int
 enet_intr_token_interrupt_unix (struct ENetIntrToken * gentoken)
 {
-	int ret = 0;
-
-	pthread_mutex_t * pMutexData = NULL;
-
 	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) gentoken;
 
-	/* paranoia */
 	if (pToken -> base.type != ENET_INTR_DATA_TYPE_UNIX)
-		{ ret = -1; goto clean; };
+		return -1;
 
 	if (pthread_mutex_lock (& pToken -> mutexData))
-		{ ret = -1; goto clean; }
-	/* take unlock responsibility */
-	pMutexData = & pToken -> mutexData;
+		return -1;
 
 	if (enet_intr_token_disabled (& pToken -> base))
-		{ ret = 0; goto clean; };
+	{
+		if (pthread_mutex_unlock (& pToken -> mutexData))
+			return -1;
 
-	/* paranoia */
+		return 0;
+	}
+
 	if (pToken -> base.intrHostData -> type != ENET_INTR_DATA_TYPE_UNIX)
-		{ ret = -1; goto clean; };
+	{
+		if (pthread_mutex_unlock (& pToken -> mutexData))
+			return -1;
+
+		return -1;
+	}
 
 	/* FIXME: hardcoded SIGUSR1 - make this configurable (likely at token creation) */
 	if (pthread_kill (pToken -> idServiceThread, SIGUSR1))
+	{
+		if (pthread_mutex_unlock (& pToken -> mutexData))
+			return -1;
+
 		return -1;
+	}
 
-clean:
-	if (pMutexData)
-		if (pthread_mutex_unlock (pMutexData))
-			{ /* dummy */ }
-
-	return ret;
+	return 0;
 }
 
 struct ENetIntrHostData *
