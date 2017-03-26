@@ -18,7 +18,36 @@
 #include "enet/intr.h"
 #include "enet/intr_unix.h"
 
-/* FIXME: missing the ifdef __APPLE__ block such as in unix.c */
+#ifdef __APPLE__
+#ifdef HAS_POLL
+#undef HAS_POLL
+#endif
+#ifndef HAS_FCNTL
+#define HAS_FCNTL 1
+#endif
+#ifndef HAS_INET_PTON
+#define HAS_INET_PTON 1
+#endif
+#ifndef HAS_INET_NTOP
+#define HAS_INET_NTOP 1
+#endif
+#ifndef HAS_MSGHDR_FLAGS
+#define HAS_MSGHDR_FLAGS 1
+#endif
+#ifndef HAS_SOCKLEN_T
+#define HAS_SOCKLEN_T 1
+#endif
+#ifndef HAS_GETADDRINFO
+#define HAS_GETADDRINFO 1
+#endif
+#ifndef HAS_GETNAMEINFO
+#define HAS_GETNAMEINFO 1
+#endif
+#endif
+
+#ifdef HAS_FCNTL
+#include <fcntl.h>
+#endif
 
 #if defined HAS_POLL || defined HAS_PPOLL
 #include <poll.h>

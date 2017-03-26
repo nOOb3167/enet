@@ -117,14 +117,14 @@ file(GLOB HDR_ALL
 	${HDR_PLATFORM}
 )
 
-IF (WIN32)
+if (WIN32)
     set(OTHER_PLATFORM_FILES ${SRC_OTHER_PLATFORM} ${HDR_OTHER_PLATFORM})
 	# prevent compilation (setting HEADER_FILE_ONLY), ensure files used in project (creating dummy library)
 	# show files under a custom filter / source group
 	set_source_files_properties(${OTHER_PLATFORM_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 	add_library(dummy_lib STATIC ${OTHER_PLATFORM_FILES})
 	source_group("Platform Files" FILES ${OTHER_PLATFORM_FILES})
-ENDIF ()
+endif ()
 
 # Visual Studio specific (Filters / Source Groups)
 source_group("Source Files" FILES ${SRC_ALL})
