@@ -76,6 +76,8 @@ struct ENetIntrTokenUnix
 
 	pthread_t idServiceThread;
 
+	int signo;
+
 	pthread_mutex_t mutexData;
 };
 
@@ -405,7 +407,7 @@ enet_intr_token_interrupt_unix (struct ENetIntrToken * gentoken)
 	}
 
 	/* FIXME: hardcoded SIGUSR1 - make this configurable (likely at token creation) */
-	if (pthread_kill (pToken -> idServiceThread, SIGUSR1))
+	if (pthread_kill (pToken -> idServiceThread, pToken -> signo))
 	{
 		if (pthread_mutex_unlock (& pToken -> mutexData))
 			return -1;
@@ -444,7 +446,7 @@ enet_intr_token_create_flags_create_win32 (void)
 }
 
 struct ENetIntrToken *
-enet_intr_token_create_win32 (void)
+enet_intr_token_create_win32 (const struct ENetIntrTokenCreateFlags * flags)
 {
 	return NULL;
 }
@@ -492,13 +494,17 @@ enet_intr_token_create_flags_create_unix (void)
 }
 
 struct ENetIntrToken *
-enet_intr_token_create_unix (void)
+enet_intr_token_create_unix (const struct ENetIntrTokenCreateFlags * flags)
 {
 	struct ENetIntrTokenUnix * pToken = (struct ENetIntrTokenUnix *) enet_malloc (sizeof (struct ENetIntrTokenUnix));
+	struct ENetIntrTokenCreateFlagsUnix * pFlags = (struct ENetIntrTokenCreateFlagsUnix *) flags;
 
 	pthread_mutexattr_t mutexAttr = {};
 
 	if (!pToken)
+		return NULL;
+
+	if (pFlags -> base.type != ENET_INTR_DATA_TYPE_UNIX)
 		return NULL;
 
 	pToken -> base.type = ENET_INTR_DATA_TYPE_UNIX;
@@ -512,6 +518,9 @@ enet_intr_token_create_unix (void)
 	pToken -> base.cb_token_interrupt = enet_intr_token_interrupt_unix;
 
 	pToken -> idServiceThread = 0;
+
+	/* FIXME: handle pFlags -> notAllDefault ? */
+	pToken -> signo = pFlags -> signo;
 
 	if (pthread_mutexattr_init (& mutexAttr))
 		return NULL;

@@ -14,9 +14,11 @@ extern "C"
 
 #ifdef _WIN32
 #include "enet/win32.h"
+#include "enet/intr_defs.h"
 #include "enet/intr_win32.h"
 #else
 #include "enet/unix.h"
+#include "enet/intr_defs.h"
 #include "enet/intr_unix.h"
 #endif
 
@@ -389,7 +391,7 @@ struct ENetIntrToken
 
 	struct ENetIntrHostData * intrHostData;
 
-	struct ENetIntrToken * (*cb_token_create)(void);
+	struct ENetIntrToken * (*cb_token_create)(const struct ENetIntrTokenCreateFlags * flags);
 	int(*cb_token_destroy)(struct ENetIntrToken *);
 	int(*cb_token_bind)(struct ENetIntrToken *, struct _ENetHost *);
 	int(*cb_token_unbind)(struct ENetIntrToken *, struct _ENetHost *);

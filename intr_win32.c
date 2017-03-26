@@ -490,7 +490,7 @@ enet_intr_token_create_flags_create_win32 (void)
 }
 
 struct ENetIntrToken *
-enet_intr_token_create_win32 (void)
+enet_intr_token_create_win32 (const struct ENetIntrTokenCreateFlags * flags)
 {
 	struct ENetIntrTokenWin32 * pToken = (struct ENetIntrTokenWin32 *) enet_malloc (sizeof (struct ENetIntrTokenWin32));
 
@@ -528,7 +528,7 @@ enet_intr_token_create_flags_create_unix (void)
 }
 
 struct ENetIntrToken *
-enet_intr_token_create_unix (void)
+enet_intr_token_create_unix (const struct ENetIntrTokenCreateFlags * flags)
 {
 	return NULL;
 }

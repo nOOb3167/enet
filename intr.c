@@ -121,11 +121,11 @@ enet_intr_token_create (const struct ENetIntrTokenCreateFlags *flags)
 	switch (createType)
 	{
 	case ENET_INTR_DATA_TYPE_WIN32:
-		intrToken = enet_intr_token_create_win32 ();
+		intrToken = enet_intr_token_create_win32 (flags);
 		break;
 
 	case ENET_INTR_DATA_TYPE_UNIX:
-		intrToken = enet_intr_token_create_unix ();
+		intrToken = enet_intr_token_create_unix (flags);
 		break;
 	}
 
