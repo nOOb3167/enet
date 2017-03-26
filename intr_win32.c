@@ -257,6 +257,7 @@ enet_intr_host_token_bind(ENetHost * host, struct ENetIntrToken * intrToken)
 static int
 enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
+	int retLastChance = 0;
 	int retSocketWait = 0;
 
 	if (! enet_intr_host_data_already_bound_any (host))
@@ -265,7 +266,12 @@ enet_intr_host_socket_wait_interruptible_win32 (ENetHost * host, enet_uint32 * c
 	if (enet_intr_host_token_bind (host, intrToken))
 		return -1;
 
-	intr -> cb_last_chance (intrToken);
+	if (0 != (retLastChance = intr -> cb_last_chance (intr, intrToken)))
+	{
+		* condition = ENET_SOCKET_WAIT_INTERRUPT;
+
+		return (retLastChance < 0) ? -1 : 0;
+	}
 
 	retSocketWait = enet_intr_host_data_helper_event_wait (host, timeout);
 

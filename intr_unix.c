@@ -113,6 +113,8 @@ enet_unix_helper_convert_timeout_timespec (enet_uint32 timeoutMs, struct timespe
 static int
 enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * condition, enet_uint32 timeout, struct ENetIntrToken * intrToken, struct ENetIntr * intr)
 {
+	int retLastChance = 0;
+
 	if (! enet_intr_host_data_already_bound_any (host))
 		return -1;
 
@@ -150,7 +152,15 @@ enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * co
 	if (pthread_sigmask (SIG_SETMASK, & newSigSet, & oldSigSet))
 		return -1;
 
-	intr->cb_last_chance (intrToken);
+	if (0 != (retLastChance = intr -> cb_last_chance (intr, intrToken)))
+	{
+		if (pthread_sigmask (SIG_SETMASK, & oldSigSet, NULL))
+			return -1;
+
+		* condition = ENET_SOCKET_WAIT_INTERRUPT;
+
+		return (retLastChance < 0) ? -1 : 0;
+	}
 
 	pollCount = ppoll (& pollSocket, 1, & timespecTimeout, & oldSigSet);
 
@@ -213,7 +223,15 @@ enet_intr_host_socket_wait_interruptible_unix (ENetHost * host, enet_uint32 * co
 	if (pthread_sigmask (SIG_SETMASK, & newSigSet, & oldSigSet))
 		return -1;
 
-	intr->cb_last_chance (intrToken);
+	if (0 != (retLastChance = intr -> cb_last_chance (intr, intrToken)))
+	{
+		if (pthread_sigmask (SIG_SETMASK, & oldSigSet, NULL))
+			return -1;
+
+		* condition = ENET_SOCKET_WAIT_INTERRUPT;
+
+		return (retLastChance < 0) ? -1 : 0;
+	}
 
     selectCount = pselect (socket + 1, & readSet, & writeSet, NULL, & timespecTimeout, & oldSigSet);
 

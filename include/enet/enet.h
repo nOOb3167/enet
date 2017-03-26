@@ -399,7 +399,23 @@ struct ENetIntrToken
 };
 
 struct ENetIntr {
-	void(*cb_last_chance)(struct ENetIntrToken *);
+	/** This callback was primarily designed for reconnection support.
+	    
+		Semantically, a callee with outstanding data to be sent
+		(ex wanting an enet_host_service type call to be backed out, allowing for use of enet_peer_send)
+		should request an interruption (by returning a > 0 value).
+
+		(last_chace prevents a race condition where an ENetIntrToken requests an
+		 interruption still bound to the old host, the old host is destroyed,
+		 the new host knows nothing about the interruption request and enters a wait.
+		 having host call last_chance before entering a wait will allow for, indeed,
+		 a 'last chance' to interrupt the wait.)
+
+	    @retval > 0 on success (and requesting an interruption)
+		@retval 0 on success   (and not requesting an interruption)
+		@retval < 0 on failure
+	*/
+	int(*cb_last_chance)(struct ENetIntr *, struct ENetIntrToken *);
 };
 
 ENET_API struct ENetIntrTokenCreateFlags * enet_intr_token_create_flags_create (enum ENetIntrDataType type);
