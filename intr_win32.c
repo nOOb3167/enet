@@ -407,6 +407,8 @@ enet_intr_token_unbind_win32 (struct ENetIntrToken * gentoken, ENetHost * host)
 
 	pToken -> base.intrHostData = NULL;
 
+	LeaveCriticalSection(& pToken->mutexData);
+
 	return 0;
 }
 
@@ -447,6 +449,8 @@ enet_intr_token_interrupt_win32 (struct ENetIntrToken * gentoken)
 
 		return -1;
 	}
+
+	LeaveCriticalSection(& pToken->mutexData);
 
 	return 0;
 }
